@@ -22,6 +22,9 @@
 #include "gpio.h"
 #include "stm32g4xx_hal.h"
 
+#include "pcd8544.h"
+#include "pcd8544_transport.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -111,10 +114,21 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  pcd8544_transport_t lcd_transport;
+  pcd8544_t lcd;
+
+  pcd8544_transport_stm32_init(&lcd_transport);
+
+  if (!pcd8544_init(&lcd, &lcd_transport))
+  {
+      Error_Handler();
+  }
+
+  pcd8544_test_pattern(&lcd);
+
   while (1)
   {
-    printf("Hello world!\r\n");
-    HAL_Delay(1000);
+    
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
