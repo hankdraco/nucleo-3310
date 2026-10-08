@@ -62,7 +62,14 @@ bool app_init(app_t *app)
         return false;
     }
 
-    display_init(&display, false);
+    display_config_t config =
+    {
+        .orientation =
+            DISPLAY_ORIENTATION_FLIP_X |
+            DISPLAY_ORIENTATION_FLIP_Y
+    };
+
+    display_init(&display, &config);
 
     draw_demo();
 

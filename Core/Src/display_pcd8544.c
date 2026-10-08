@@ -17,17 +17,24 @@ bool display_pcd8544_flush(
 
             for (uint8_t bit = 0U; bit < 8U; ++bit)
             {
-                uint8_t physical_y = (uint8_t)(bank * 8U + bit);
+                uint8_t logical_x = x;
+                uint8_t logical_y = (uint8_t)(bank * 8U + bit);
 
-                uint8_t logical_y = display->flip_y
-                    ? (uint8_t)(DISPLAY_HEIGHT - 1U - physical_y)
-                    : physical_y;
+                if (display->config.orientation & DISPLAY_ORIENTATION_FLIP_X)
+                {
+                    logical_x = DISPLAY_WIDTH - 1U - logical_x;
+                }
+
+                if (display->config.orientation & DISPLAY_ORIENTATION_FLIP_Y)
+                {
+                    logical_y = DISPLAY_HEIGHT - 1U - logical_y;
+                }
 
                 bool on = false;
 
                 if (!display_get_pixel(
                         display,
-                        x,
+                        logical_x,
                         logical_y,
                         &on))
                 {

@@ -6,8 +6,11 @@
 static bool test_display_clear(void)
 {
     display_t display;
-
-    display_init(&display, false);
+    display_config_t config =
+    {
+        .orientation = DISPLAY_ORIENTATION_NORMAL
+    };
+    display_init(&display, &config);
 
     display_set_pixel(&display, 10, 20, true);
     display_set_pixel(&display, 30, 40, true);
@@ -36,8 +39,11 @@ static bool test_display_clear(void)
 static bool test_display_set_pixel(void)
 {
     display_t display;
-
-    display_init(&display, false);
+    display_config_t config =
+    {
+        .orientation = DISPLAY_ORIENTATION_NORMAL
+    };
+    display_init(&display, &config);
 
     CHECK(display_set_pixel(
         &display,
@@ -97,8 +103,11 @@ static bool test_display_set_pixel(void)
 static bool test_display_pixel_boundaries(void)
 {
     display_t display;
-
-    display_init(&display, false);
+    display_config_t config =
+    {
+        .orientation = DISPLAY_ORIENTATION_NORMAL
+    };
+    display_init(&display, &config);
 
     bool on = false;
 
@@ -137,7 +146,11 @@ static bool test_display_pixel_boundaries(void)
 static bool test_display_pcd8544_flush(void)
 {
     display_t display;
-    display_init(&display, false);
+    display_config_t config =
+    {
+        .orientation = DISPLAY_ORIENTATION_NORMAL
+    };
+    display_init(&display, &config);
 
     /*
      * Selected pixels exercise:
@@ -226,15 +239,17 @@ static bool test_display_pcd8544_flush(void)
 static bool test_display_pcd8544_flush_flip_y(void)
 {
     display_t display;
-    display_init(&display, true);
+    display_config_t config =
+    {
+        .orientation = DISPLAY_ORIENTATION_FLIP_Y
+    };
+    display_init(&display, &config);
 
     CHECK(display_set_pixel(
         &display,
         0U,
         0U,
         true));
-
-    display.flip_y = true;
 
     fake_transport_t fake;
     fake_transport_init(&fake);

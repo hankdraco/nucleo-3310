@@ -8,14 +8,27 @@
 #define DISPLAY_HEIGHT             48U
 #define DISPLAY_FRAMEBUFFER_SIZE   ((DISPLAY_WIDTH * DISPLAY_HEIGHT) / 8U)
 
+#define DISPLAY_ORIENTATION_NORMAL  0x00U
+#define DISPLAY_ORIENTATION_FLIP_X  0x01U
+#define DISPLAY_ORIENTATION_FLIP_Y  0x02U
+
+typedef struct
+{
+    uint8_t orientation;
+
+} display_config_t;
+
 typedef struct
 {
     uint8_t framebuffer[DISPLAY_FRAMEBUFFER_SIZE];
-    bool flip_y;
+    display_config_t config;
 
 } display_t;
 
-void display_init(display_t *display, bool flip_y);
+void display_init(
+    display_t *display,
+    const display_config_t *config
+);
 
 void display_clear(display_t *display);
 
