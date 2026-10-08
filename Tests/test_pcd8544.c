@@ -20,6 +20,9 @@ typedef struct
     uint8_t written_bytes[16];
     size_t written_count;
 
+    size_t write_call_count;
+    size_t write_sizes[16];
+
     bool dc_history[16];
     size_t dc_count;
 
@@ -70,6 +73,10 @@ static bool fake_write(
     size_t size)
 {
     fake_transport_t *fake = context;
+
+    CHECK(fake->write_call_count < sizeof(fake->write_sizes));
+
+    fake->write_sizes[fake->write_call_count++] = size;
 
     for (size_t i = 0; i < size; ++i)
     {
@@ -173,6 +180,76 @@ static bool test_pcd8544_init(void)
     return true;
 }
 
+static bool test_pcd8544_write_data(void)
+{
+    fake_transport_t fake = {0};
+
+    const pcd8544_transport_t transport =
+    {
+        .context = &fake,
+        .set_sce = fake_set_sce,
+        .set_dc = fake_set_dc,
+        .set_reset = fake_set_reset,
+        .write = fake_write,
+        .delay_ms = fake_delay_ms
+    };
+
+    pcd8544_t lcd =
+    {
+        .transport = &transport
+    };
+
+    const uint8_t data[] =
+    {
+        0x12,
+        0x34,
+        0x56,
+        0x78
+    };
+
+    CHECK(pcd8544_write_data(
+        &lcd,
+        data,
+        sizeof(data)));
+
+    /*
+     * The data must be sent as one transport operation.
+     */
+    CHECK(fake.write_call_count == 1);
+    CHECK(fake.write_sizes[0] == sizeof(data));
+
+    /*
+     * Verify the transmitted bytes.
+     */
+    CHECK(fake.written_count == sizeof(data));
+
+    for (size_t i = 0; i < sizeof(data); ++i)
+    {
+        CHECK(fake.written_bytes[i] == data[i]);
+    }
+
+    /*
+     * Data mode.
+     */
+    CHECK(fake.dc_count == 1);
+    CHECK(fake.dc_history[0] == true);
+
+    /*
+     * SCE is active for the whole packet.
+     */
+    CHECK(fake.sce_count == 2);
+    CHECK(fake.sce_history[0] == true);
+    CHECK(fake.sce_history[1] == false);
+
+    /*
+     * No reset or delay should occur.
+     */
+    CHECK(fake.reset_count == 0);
+    CHECK(fake.delay_count == 0);
+
+    return true;
+}
+
 int main(void)
 {
     printf("PCD8544 tests\n");
@@ -185,6 +262,14 @@ int main(void)
     }
 
     printf("PASS: test_pcd8544_init\n");
+
+    if (!test_pcd8544_write_data())
+    {
+        printf("TESTS FAILED\n");
+        return 1;
+    }
+
+    printf("PASS: test_pcd8544_write_data\n");
     printf("ALL TESTS PASSED\n");
 
     return 0;

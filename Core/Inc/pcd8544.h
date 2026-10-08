@@ -1,6 +1,7 @@
 #ifndef PCD8544_H
 #define PCD8544_H
 
+#include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -20,6 +21,12 @@ typedef struct
 bool pcd8544_init(
     pcd8544_t *lcd,
     const pcd8544_transport_t *transport
+);
+
+bool pcd8544_write_data(
+    pcd8544_t *lcd,
+    const uint8_t *data,
+    size_t size
 );
 
 void pcd8544_test_pattern(pcd8544_t *lcd);

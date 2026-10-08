@@ -28,27 +28,6 @@ static bool pcd8544_write_command(
     return success;
 }
 
-static bool pcd8544_write_data(
-    pcd8544_t *lcd,
-    uint8_t data
-)
-{
-    const pcd8544_transport_t *transport = lcd->transport;
-
-    transport->set_dc(transport->context, true);
-    transport->set_sce(transport->context, true);
-
-    bool success = transport->write(
-        transport->context,
-        &data,
-        1U
-    );
-
-    transport->set_sce(transport->context, false);
-
-    return success;
-}
-
 static void pcd8544_reset(pcd8544_t *lcd)
 {
     const pcd8544_transport_t *transport = lcd->transport;
@@ -141,25 +120,64 @@ bool pcd8544_init(
     return true;
 }
 
+bool pcd8544_write_data(
+    pcd8544_t *lcd,
+    const uint8_t *data,
+    size_t size
+)
+{
+    const pcd8544_transport_t *transport = lcd->transport;
+
+    if (size == 0U)
+    {
+        return true;
+    }
+
+    if (data == NULL)
+    {
+        return false;
+    }
+
+    transport->set_dc(transport->context, true);
+    transport->set_sce(transport->context, true);
+
+    bool success = transport->write(
+        transport->context,
+        data,
+        size
+    );
+
+    transport->set_sce(transport->context, false);
+
+    return success;
+}
+
 void pcd8544_test_pattern(pcd8544_t *lcd)
 {
+    uint8_t pattern[PCD8544_BYTES_PER_BANK];
+
     for (uint8_t bank = 0; bank < PCD8544_BANKS; ++bank)
     {
+        uint8_t value = (bank % 2U == 0U)
+            ? 0xAAU
+            : 0x55U;
+
+        for (size_t x = 0; x < sizeof(pattern); ++x)
+        {
+            pattern[x] = value;
+        }
+
         if (!pcd8544_set_position(lcd, 0U, bank))
         {
             return;
         }
 
-        for (uint8_t x = 0; x < PCD8544_BYTES_PER_BANK; ++x)
+        if (!pcd8544_write_data(
+                lcd,
+                pattern,
+                sizeof(pattern)))
         {
-            uint8_t pattern = (bank % 2U == 0U)
-                ? 0xAAU
-                : 0x55U;
-
-            if (!pcd8544_write_data(lcd, pattern))
-            {
-                return;
-            }
+            return;
         }
     }
 }
