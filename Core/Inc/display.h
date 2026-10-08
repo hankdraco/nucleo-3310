@@ -11,10 +11,11 @@
 typedef struct
 {
     uint8_t framebuffer[DISPLAY_FRAMEBUFFER_SIZE];
+    bool flip_y;
 
 } display_t;
 
-void display_init(display_t *display);
+void display_init(display_t *display, bool flip_y);
 
 void display_clear(display_t *display);
 

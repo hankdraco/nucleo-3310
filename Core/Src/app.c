@@ -62,7 +62,7 @@ bool app_init(app_t *app)
         return false;
     }
 
-    display_init(&display);
+    display_init(&display, false);
 
     draw_demo();
 

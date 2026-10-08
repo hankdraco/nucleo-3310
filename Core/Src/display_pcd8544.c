@@ -15,13 +15,21 @@ bool display_pcd8544_flush(
         {
             uint8_t value = 0U;
 
-            for (uint8_t bit = 0; bit < 8U; ++bit)
+            for (uint8_t bit = 0U; bit < 8U; ++bit)
             {
-                uint8_t y = (uint8_t)(bank * 8U + bit);
+                uint8_t physical_y = (uint8_t)(bank * 8U + bit);
+
+                uint8_t logical_y = display->flip_y
+                    ? (uint8_t)(DISPLAY_HEIGHT - 1U - physical_y)
+                    : physical_y;
 
                 bool on = false;
 
-                if (!display_get_pixel(display, x, y, &on))
+                if (!display_get_pixel(
+                        display,
+                        x,
+                        logical_y,
+                        &on))
                 {
                     return false;
                 }

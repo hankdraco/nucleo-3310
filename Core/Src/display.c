@@ -8,8 +8,9 @@ static bool display_coordinates_valid(uint8_t x, uint8_t y)
     return x < DISPLAY_WIDTH && y < DISPLAY_HEIGHT;
 }
 
-void display_init(display_t *display)
+void display_init(display_t *display, bool flip_y)
 {
+    display->flip_y = flip_y;
     display_clear(display);
 }
 

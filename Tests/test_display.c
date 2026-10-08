@@ -7,7 +7,7 @@ static bool test_display_clear(void)
 {
     display_t display;
 
-    display_init(&display);
+    display_init(&display, false);
 
     display_set_pixel(&display, 10, 20, true);
     display_set_pixel(&display, 30, 40, true);
@@ -37,7 +37,7 @@ static bool test_display_set_pixel(void)
 {
     display_t display;
 
-    display_init(&display);
+    display_init(&display, false);
 
     CHECK(display_set_pixel(
         &display,
@@ -98,7 +98,7 @@ static bool test_display_pixel_boundaries(void)
 {
     display_t display;
 
-    display_init(&display);
+    display_init(&display, false);
 
     bool on = false;
 
@@ -137,7 +137,7 @@ static bool test_display_pixel_boundaries(void)
 static bool test_display_pcd8544_flush(void)
 {
     display_t display;
-    display_init(&display);
+    display_init(&display, false);
 
     /*
      * Selected pixels exercise:
@@ -223,6 +223,66 @@ static bool test_display_pcd8544_flush(void)
     return true;
 }
 
+static bool test_display_pcd8544_flush_flip_y(void)
+{
+    display_t display;
+    display_init(&display, true);
+
+    CHECK(display_set_pixel(
+        &display,
+        0U,
+        0U,
+        true));
+
+    display.flip_y = true;
+
+    fake_transport_t fake;
+    fake_transport_init(&fake);
+
+    pcd8544_t lcd =
+    {
+        .transport = &fake.transport
+    };
+
+    CHECK(display_pcd8544_flush(&display, &lcd));
+    CHECK(fake.overflowed == false);
+
+    /*
+     * Logical (0,0) must appear at physical (0,47).
+     *
+     * Physical Y=47 belongs to bank 5,
+     * bit 7 of the first byte.
+     */
+    size_t data_call = 5U * 3U + 2U;
+
+    CHECK(fake.write_sizes[data_call] == PCD8544_WIDTH);
+
+    CHECK(fake.write_calls[data_call][0U] == 0x80U);
+
+    /*
+     * No other pixel should be set in that bank.
+     */
+    for (uint8_t x = 1U; x < PCD8544_WIDTH; ++x)
+    {
+        CHECK(fake.write_calls[data_call][x] == 0U);
+    }
+
+    /*
+     * All other banks must remain empty.
+     */
+    for (uint8_t bank = 0U; bank < PCD8544_BANKS - 1U; ++bank)
+    {
+        data_call = (size_t)bank * 3U + 2U;
+
+        for (uint8_t x = 0U; x < PCD8544_WIDTH; ++x)
+        {
+            CHECK(fake.write_calls[data_call][x] == 0U);
+        }
+    }
+
+    return true;
+}
+
 bool test_display_suite(void)
 {
     if (!test_display_clear())
@@ -235,6 +295,9 @@ bool test_display_suite(void)
         return false;
 
     if (!test_display_pcd8544_flush())
+        return false;
+
+    if (!test_display_pcd8544_flush_flip_y())
         return false;
 
     return true;
