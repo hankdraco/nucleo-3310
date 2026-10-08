@@ -1,19 +1,5 @@
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-
 #include "../Core/Inc/pcd8544.h"
-
-#define CHECK(condition)                                                   \
-    do                                                                      \
-    {                                                                       \
-        if (!(condition))                                                   \
-        {                                                                   \
-            printf("FAIL: %s:%d: %s\n", __FILE__, __LINE__, #condition);   \
-            return false;                                                   \
-        }                                                                   \
-    } while (0)
+#include "test_common.h"
 
 typedef struct
 {
@@ -250,27 +236,13 @@ static bool test_pcd8544_write_data(void)
     return true;
 }
 
-int main(void)
+bool test_pcd8544_suite(void)
 {
-    printf("PCD8544 tests\n");
-    printf("=============\n");
-
     if (!test_pcd8544_init())
-    {
-        printf("TESTS FAILED\n");
-        return 1;
-    }
-
-    printf("PASS: test_pcd8544_init\n");
+        return false;
 
     if (!test_pcd8544_write_data())
-    {
-        printf("TESTS FAILED\n");
-        return 1;
-    }
+        return false;
 
-    printf("PASS: test_pcd8544_write_data\n");
-    printf("ALL TESTS PASSED\n");
-
-    return 0;
+    return true;
 }

@@ -33,38 +33,43 @@ cmake --build Tests/build
 The test executable is created as:
 
 ```text
-Tests/build/pcd8544_tests.exe
+Tests/build/nucleo_3310_tests.exe
 ```
 
 ## Run the tests
 
 ```powershell
-.\Tests\build\pcd8544_tests.exe
+.\Tests\build\nucleo_3310_tests.exe
 ```
 
 A successful run should look like:
 
 ```text
-PCD8544 tests
-=============
-PASS: test_pcd8544_init
+Tests
+=====
+PCD8544 TESTS PASSED
+DISPLAY TESTS PASSED
 ALL TESTS PASSED
 ```
 
 ## Test architecture
 
-The tests compile the portable PCD8544 driver directly:
+The tests exercise the portable parts of the project directly:
 
 ```text
-Tests/test_pcd8544.c
-        │
-        ▼
-Core/Src/pcd8544.c
-        │
-        ▼
-fake transport
+                 Tests/test_runner.c
+                         │
+             ┌───────────┴───────────┐
+             ▼                       ▼
+    test_pcd8544.c            test_display.c
+             │                       │
+             ▼                       ▼
+      Core/Src/pcd8544.c      Core/Src/display.c
+             │
+             ▼
+       fake transport
 ```
 
 The STM32-specific transport implementation is intentionally not part of the host test build.
 
-This allows the same PCD8544 driver code to be tested on the PC without requiring the target hardware.
+This allows the portable PCD8544 driver and display logic to be tested on the PC without requiring the STM32 board, STM32 HAL, or LCD hardware.
