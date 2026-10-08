@@ -298,6 +298,134 @@ static bool test_display_pcd8544_flush_flip_y(void)
     return true;
 }
 
+static bool test_display_pcd8544_flush_flip_x(void)
+{
+    display_t display;
+
+    display_config_t config =
+    {
+        .orientation = DISPLAY_ORIENTATION_FLIP_X
+    };
+
+    display_init(&display, &config);
+
+    CHECK(display_set_pixel(
+        &display,
+        0U,
+        0U,
+        true));
+
+    fake_transport_t fake;
+    fake_transport_init(&fake);
+
+    pcd8544_t lcd =
+    {
+        .transport = &fake.transport
+    };
+
+    CHECK(display_pcd8544_flush(&display, &lcd));
+    CHECK(fake.overflowed == false);
+
+    /*
+     * Logical (0,0) must appear at physical (83,0).
+     *
+     * Physical Y=0 -> bank 0, bit 0.
+     */
+    size_t data_call = 2U;
+
+    CHECK(fake.write_sizes[data_call] == PCD8544_WIDTH);
+
+    CHECK(fake.write_calls[data_call][83U] == 0x01U);
+
+    /*
+     * No other pixel in bank 0 may be set.
+     */
+    for (uint8_t x = 0U; x < 83U; ++x)
+    {
+        CHECK(fake.write_calls[data_call][x] == 0U);
+    }
+
+    /*
+     * All other banks must remain empty.
+     */
+    for (uint8_t bank = 1U; bank < PCD8544_BANKS; ++bank)
+    {
+        data_call = (size_t)bank * 3U + 2U;
+
+        for (uint8_t x = 0U; x < PCD8544_WIDTH; ++x)
+        {
+            CHECK(fake.write_calls[data_call][x] == 0U);
+        }
+    }
+
+    return true;
+}
+
+static bool test_display_pcd8544_flush_flip_x_y(void)
+{
+    display_t display;
+
+    display_config_t config =
+    {
+        .orientation =
+            DISPLAY_ORIENTATION_FLIP_X |
+            DISPLAY_ORIENTATION_FLIP_Y
+    };
+
+    display_init(&display, &config);
+
+    CHECK(display_set_pixel(
+        &display,
+        0U,
+        0U,
+        true));
+
+    fake_transport_t fake;
+    fake_transport_init(&fake);
+
+    pcd8544_t lcd =
+    {
+        .transport = &fake.transport
+    };
+
+    CHECK(display_pcd8544_flush(&display, &lcd));
+    CHECK(fake.overflowed == false);
+
+    /*
+     * Logical (0,0) becomes physical (83,47).
+     *
+     * Physical Y=47 -> bank 5, bit 7.
+     */
+    size_t data_call = 5U * 3U + 2U;
+
+    CHECK(fake.write_sizes[data_call] == PCD8544_WIDTH);
+
+    CHECK(fake.write_calls[data_call][83U] == 0x80U);
+
+    /*
+     * No other pixel in the last bank may be set.
+     */
+    for (uint8_t x = 0U; x < 83U; ++x)
+    {
+        CHECK(fake.write_calls[data_call][x] == 0U);
+    }
+
+    /*
+     * All other banks must remain empty.
+     */
+    for (uint8_t bank = 0U; bank < PCD8544_BANKS - 1U; ++bank)
+    {
+        data_call = (size_t)bank * 3U + 2U;
+
+        for (uint8_t x = 0U; x < PCD8544_WIDTH; ++x)
+        {
+            CHECK(fake.write_calls[data_call][x] == 0U);
+        }
+    }
+
+    return true;
+}
+
 bool test_display_suite(void)
 {
     if (!test_display_clear())
@@ -313,6 +441,12 @@ bool test_display_suite(void)
         return false;
 
     if (!test_display_pcd8544_flush_flip_y())
+        return false;
+
+    if (!test_display_pcd8544_flush_flip_x())
+        return false;
+
+    if (!test_display_pcd8544_flush_flip_x_y())
         return false;
 
     return true;
