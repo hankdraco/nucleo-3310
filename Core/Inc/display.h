@@ -46,4 +46,12 @@ bool display_get_pixel(
     bool *on
 );
 
+bool display_draw_line(
+    display_t *display,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1
+);
+
 #endif /* DISPLAY_H */

@@ -426,6 +426,144 @@ static bool test_display_pcd8544_flush_flip_x_y(void)
     return true;
 }
 
+static bool test_display_draw_line(void)
+{
+    display_t display;
+
+    display_init(&display, &(display_config_t)
+    {
+        .orientation = DISPLAY_ORIENTATION_NORMAL
+    });
+
+    /*
+     * Horizontal line: (1, 10) -> (5, 10)
+     */
+    CHECK(display_draw_line(
+        &display,
+        1, 10,
+        5, 10));
+
+    for (uint8_t x = 0; x < DISPLAY_WIDTH; ++x)
+    {
+        bool on = false;
+
+        CHECK(display_get_pixel(
+            &display,
+            x,
+            10,
+            &on));
+
+        CHECK(on == (x >= 1 && x <= 5));
+    }
+
+    display_clear(&display);
+
+    /*
+     * Vertical line: (20, 2) -> (20, 6)
+     */
+    CHECK(display_draw_line(
+        &display,
+        20, 2,
+        20, 6));
+
+    for (uint8_t y = 0; y < DISPLAY_HEIGHT; ++y)
+    {
+        bool on = false;
+
+        CHECK(display_get_pixel(
+            &display,
+            20,
+            y,
+            &on));
+
+        CHECK(on == (y >= 2 && y <= 6));
+    }
+
+    display_clear(&display);
+
+    /*
+     * 45-degree line: (10, 10) -> (14, 14)
+     */
+    CHECK(display_draw_line(
+        &display,
+        10, 10,
+        14, 14));
+
+    for (int16_t i = 0; i <= 4; ++i)
+    {
+        bool on = false;
+
+        CHECK(display_get_pixel(
+            &display,
+            (uint8_t)(10 + i),
+            (uint8_t)(10 + i),
+            &on));
+
+        CHECK(on);
+    }
+
+    display_clear(&display);
+
+    /*
+     * Non-45-degree line:
+     *
+     * (0,0) -> (5,3)
+     *
+     * Expected rasterized pixels:
+     *
+     * (0,0)
+     * (1,1)
+     * (2,1)
+     * (3,2)
+     * (4,2)
+     * (5,3)
+     */
+    CHECK(display_draw_line(
+        &display,
+        0, 0,
+        5, 3));
+
+    const int16_t expected[][2] =
+    {
+        {0, 0},
+        {1, 1},
+        {2, 1},
+        {3, 2},
+        {4, 2},
+        {5, 3}
+    };
+
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); ++i)
+    {
+        bool on = false;
+
+        CHECK(display_get_pixel(
+            &display,
+            (uint8_t)expected[i][0],
+            (uint8_t)expected[i][1],
+            &on));
+
+        CHECK(on);
+    }
+
+    /*
+     * Out-of-range endpoints must be rejected.
+     */
+    display_clear(&display);
+
+    CHECK(display_draw_line(
+        &display,
+        -1, 0,
+        5, 3) == false);
+
+    CHECK(display_draw_line(
+        &display,
+        0, 0,
+        DISPLAY_WIDTH, 3) == false);
+
+    return true;
+}
+
 bool test_display_suite(void)
 {
     if (!test_display_clear())
@@ -447,6 +585,9 @@ bool test_display_suite(void)
         return false;
 
     if (!test_display_pcd8544_flush_flip_x_y())
+        return false;
+
+    if (!test_display_draw_line())
         return false;
 
     return true;

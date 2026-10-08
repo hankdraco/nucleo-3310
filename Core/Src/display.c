@@ -71,3 +71,58 @@ bool display_get_pixel(
 
     return true;
 }
+
+bool display_draw_line(
+    display_t *display,
+    int16_t x0,
+    int16_t y0,
+    int16_t x1,
+    int16_t y1)
+{
+    if (x0 < 0 || x0 >= DISPLAY_WIDTH ||
+        y0 < 0 || y0 >= DISPLAY_HEIGHT ||
+        x1 < 0 || x1 >= DISPLAY_WIDTH ||
+        y1 < 0 || y1 >= DISPLAY_HEIGHT)
+    {
+        return false;
+    }
+
+    int16_t dx = x1 > x0 ? x1 - x0 : x0 - x1;
+    int16_t sx = x0 < x1 ? 1 : -1;
+
+    int16_t dy = y1 > y0 ? -(y1 - y0) : -(y0 - y1);
+    int16_t sy = y0 < y1 ? 1 : -1;
+
+    int16_t error = dx + dy;
+
+    while (true)
+    {
+        display_set_pixel(
+            display,
+            (uint8_t)x0,
+            (uint8_t)y0,
+            true
+        );
+
+        if (x0 == x1 && y0 == y1)
+        {
+            break;
+        }
+
+        int16_t error2 = 2 * error;
+
+        if (error2 >= dy)
+        {
+            error += dy;
+            x0 += sx;
+        }
+
+        if (error2 <= dx)
+        {
+            error += dx;
+            y0 += sy;
+        }
+    }
+
+    return true;
+}

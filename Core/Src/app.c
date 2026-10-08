@@ -13,42 +13,13 @@ static display_t display;
 
 static void draw_demo(void)
 {
-    for (uint8_t x = 0U; x < DISPLAY_WIDTH; ++x)
-    {
-        display_set_pixel(&display, x, 0U, true);
-        display_set_pixel(
-            &display,
-            x,
-            DISPLAY_HEIGHT - 1U,
-            true
-        );
-    }
+    display_draw_line(&display, 0, 0, 83, 0);
+    display_draw_line(&display, 83, 0, 83, 47);
+    display_draw_line(&display, 83, 47, 0, 47);
+    display_draw_line(&display, 0, 47, 0, 0);
 
-    for (uint8_t y = 0U; y < DISPLAY_HEIGHT; ++y)
-    {
-        display_set_pixel(&display, 0U, y, true);
-        display_set_pixel(
-            &display,
-            DISPLAY_WIDTH - 1U,
-            y,
-            true
-        );
-    }
-
-    for (uint8_t x = 0U; x < DISPLAY_WIDTH; ++x)
-    {
-        uint8_t y1 = (uint8_t)(
-            ((uint16_t)x * (DISPLAY_HEIGHT - 1U)) /
-            (DISPLAY_WIDTH - 1U)
-        );
-
-        uint8_t y2 = (uint8_t)(
-            (DISPLAY_HEIGHT - 1U) - y1
-        );
-
-        display_set_pixel(&display, x, y1, true);
-        display_set_pixel(&display, x, y2, true);
-    }
+    display_draw_line(&display, 0, 0, 83, 47);
+    display_draw_line(&display, 83, 0, 0, 47);
 }
 
 bool app_init(app_t *app)
