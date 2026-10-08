@@ -42,7 +42,7 @@ static void pcd8544_reset(pcd8544_t *lcd)
     transport->delay_ms(transport->context, 1U);
 }
 
-static bool pcd8544_set_position(
+bool pcd8544_set_position(
     pcd8544_t *lcd,
     uint8_t x,
     uint8_t bank

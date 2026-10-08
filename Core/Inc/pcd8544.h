@@ -29,6 +29,12 @@ bool pcd8544_write_data(
     size_t size
 );
 
+bool pcd8544_set_position(
+    pcd8544_t *lcd,
+    uint8_t x,
+    uint8_t bank
+);
+
 void pcd8544_test_pattern(pcd8544_t *lcd);
 
 #endif /* PCD8544_H */

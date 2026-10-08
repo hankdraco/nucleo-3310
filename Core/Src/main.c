@@ -22,12 +22,13 @@
 #include "gpio.h"
 #include "stm32g4xx_hal.h"
 
+/* Private includes ----------------------------------------------------------*/
+/* USER CODE BEGIN Includes */
 #include "pcd8544.h"
 #include "pcd8544_transport.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
+#include "display.h"
+#include "display_pcd8544.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -117,6 +118,8 @@ int main(void)
   pcd8544_transport_t lcd_transport;
   pcd8544_t lcd;
 
+  display_t display;
+
   pcd8544_transport_stm32_init(&lcd_transport);
 
   if (!pcd8544_init(&lcd, &lcd_transport))
@@ -124,7 +127,43 @@ int main(void)
       Error_Handler();
   }
 
-  pcd8544_test_pattern(&lcd);
+  display_init(&display);
+
+  /*
+  * Draw a simple test pattern on the framebuffer.
+  */
+  for (uint8_t x = 0U; x < DISPLAY_WIDTH; ++x)
+  {
+      display_set_pixel(&display, x, 0U, true);
+      display_set_pixel(&display, x, DISPLAY_HEIGHT - 1U, true);
+  }
+
+  for (uint8_t y = 0U; y < DISPLAY_HEIGHT; ++y)
+  {
+      display_set_pixel(&display, 0U, y, true);
+      display_set_pixel(&display, DISPLAY_WIDTH - 1U, y, true);
+  }
+
+  /* Diagonal lines. */
+  for (uint8_t x = 0U; x < DISPLAY_WIDTH; ++x)
+  {
+      uint8_t y1 = (uint8_t)(
+          ((uint16_t)x * (DISPLAY_HEIGHT - 1U)) /
+          (DISPLAY_WIDTH - 1U)
+      );
+
+      uint8_t y2 = (uint8_t)(
+          (DISPLAY_HEIGHT - 1U) - y1
+      );
+
+      display_set_pixel(&display, x, y1, true);
+      display_set_pixel(&display, x, y2, true);
+  }
+
+  if (!display_pcd8544_flush(&display, &lcd))
+  {
+      Error_Handler();
+  }
 
   while (1)
   {

@@ -1,106 +1,16 @@
 #include "../Core/Inc/pcd8544.h"
 #include "test_common.h"
-
-typedef struct
-{
-    uint8_t written_bytes[16];
-    size_t written_count;
-
-    size_t write_call_count;
-    size_t write_sizes[16];
-
-    bool dc_history[16];
-    size_t dc_count;
-
-    bool sce_history[16];
-    size_t sce_count;
-
-    bool reset_history[16];
-    size_t reset_count;
-
-    uint32_t delays_ms[16];
-    size_t delay_count;
-
-} fake_transport_t;
-
-static void fake_set_sce(void *context, bool active)
-{
-    fake_transport_t *fake = context;
-
-    if (fake->sce_count < sizeof(fake->sce_history))
-    {
-        fake->sce_history[fake->sce_count++] = active;
-    }
-}
-
-static void fake_set_dc(void *context, bool data)
-{
-    fake_transport_t *fake = context;
-
-    if (fake->dc_count < sizeof(fake->dc_history))
-    {
-        fake->dc_history[fake->dc_count++] = data;
-    }
-}
-
-static void fake_set_reset(void *context, bool asserted)
-{
-    fake_transport_t *fake = context;
-
-    if (fake->reset_count < sizeof(fake->reset_history))
-    {
-        fake->reset_history[fake->reset_count++] = asserted;
-    }
-}
-
-static bool fake_write(
-    void *context,
-    const uint8_t *data,
-    size_t size)
-{
-    fake_transport_t *fake = context;
-
-    CHECK(fake->write_call_count < sizeof(fake->write_sizes));
-
-    fake->write_sizes[fake->write_call_count++] = size;
-
-    for (size_t i = 0; i < size; ++i)
-    {
-        CHECK(fake->written_count < sizeof(fake->written_bytes));
-
-        fake->written_bytes[fake->written_count++] = data[i];
-    }
-
-    return true;
-}
-
-static void fake_delay_ms(void *context, uint32_t milliseconds)
-{
-    fake_transport_t *fake = context;
-
-    if (fake->delay_count < sizeof(fake->delays_ms))
-    {
-        fake->delays_ms[fake->delay_count++] = milliseconds;
-    }
-}
+#include "test_fake_transport.h"
 
 static bool test_pcd8544_init(void)
 {
-    fake_transport_t fake = {0};
+    fake_transport_t fake;
 
-    const pcd8544_transport_t transport =
-    {
-        .context = &fake,
-        .set_sce = fake_set_sce,
-        .set_dc = fake_set_dc,
-        .set_reset = fake_set_reset,
-        .write = fake_write,
-        .delay_ms = fake_delay_ms
-    };
+    fake_transport_init(&fake);
 
     pcd8544_t lcd;
 
-    bool result = pcd8544_init(&lcd, &transport);
+    bool result = pcd8544_init(&lcd, &fake.transport);
 
     CHECK(result);
 
@@ -168,21 +78,13 @@ static bool test_pcd8544_init(void)
 
 static bool test_pcd8544_write_data(void)
 {
-    fake_transport_t fake = {0};
+    fake_transport_t fake;
 
-    const pcd8544_transport_t transport =
-    {
-        .context = &fake,
-        .set_sce = fake_set_sce,
-        .set_dc = fake_set_dc,
-        .set_reset = fake_set_reset,
-        .write = fake_write,
-        .delay_ms = fake_delay_ms
-    };
+    fake_transport_init(&fake);
 
     pcd8544_t lcd =
     {
-        .transport = &transport
+        .transport = &fake.transport
     };
 
     const uint8_t data[] =

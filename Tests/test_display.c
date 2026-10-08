@@ -1,5 +1,7 @@
 #include "../Core/Inc/display.h"
 #include "test_common.h"
+#include "test_fake_transport.h"
+#include "../Core/Inc/display_pcd8544.h"
 
 static bool test_display_clear(void)
 {
@@ -132,6 +134,95 @@ static bool test_display_pixel_boundaries(void)
     return true;
 }
 
+static bool test_display_pcd8544_flush(void)
+{
+    display_t display;
+    display_init(&display);
+
+    /*
+     * Selected pixels exercise:
+     *
+     * - bit 0
+     * - bit 7
+     * - crossing an X byte boundary
+     * - crossing a Y bank boundary
+     * - bottom-right corner
+     */
+    CHECK(display_set_pixel(&display, 0U, 0U, true));
+    CHECK(display_set_pixel(&display, 1U, 0U, true));
+    CHECK(display_set_pixel(&display, 7U, 0U, true));
+    CHECK(display_set_pixel(&display, 8U, 0U, true));
+
+    CHECK(display_set_pixel(&display, 0U, 7U, true));
+    CHECK(display_set_pixel(&display, 0U, 8U, true));
+
+    CHECK(display_set_pixel(
+        &display,
+        DISPLAY_WIDTH - 1U,
+        DISPLAY_HEIGHT - 1U,
+        true));
+
+    fake_transport_t fake;
+    fake_transport_init(&fake);
+
+    pcd8544_t lcd =
+    {
+        .transport = &fake.transport
+    };
+
+    CHECK(display_pcd8544_flush(&display, &lcd));
+    CHECK(fake.overflowed == false);
+
+    /*
+     * Each bank requires:
+     *
+     *   1 write for Y address
+     *   1 write for X address
+     *   1 write for 84 bytes of display data
+     *
+     * 6 banks => 18 write calls.
+     */
+    CHECK(fake.write_call_count == PCD8544_BANKS * 3U);
+
+    /*
+     * Build the expected PCD8544 representation.
+     */
+    uint8_t expected[
+        PCD8544_BANKS
+    ][
+        PCD8544_WIDTH
+    ] = {0};
+
+    expected[0U][0U] = 0x81U;
+    expected[0U][1U] = 0x01U;
+    expected[0U][7U] = 0x01U;
+    expected[0U][8U] = 0x01U;
+
+    expected[1U][0U] = 0x01U;
+
+    expected[5U][83U] = 0x80U;
+
+    /*
+     * Verify every bank.
+     */
+    for (uint8_t bank = 0U; bank < PCD8544_BANKS; ++bank)
+    {
+        size_t data_call = (size_t)bank * 3U + 2U;
+
+        CHECK(fake.write_sizes[data_call] == PCD8544_WIDTH);
+
+        for (uint8_t x = 0U; x < PCD8544_WIDTH; ++x)
+        {
+            CHECK(
+                fake.write_calls[data_call][x] ==
+                expected[bank][x]
+            );
+        }
+    }
+
+    return true;
+}
+
 bool test_display_suite(void)
 {
     if (!test_display_clear())
@@ -141,6 +232,9 @@ bool test_display_suite(void)
         return false;
 
     if (!test_display_pixel_boundaries())
+        return false;
+
+    if (!test_display_pcd8544_flush())
         return false;
 
     return true;
