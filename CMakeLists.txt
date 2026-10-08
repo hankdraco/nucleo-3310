@@ -49,6 +49,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/pcd8544_transport_stm32.c
     Core/Src/display.c
     Core/Src/display_pcd8544.c
+    Core/Src/app.c
 )
 
 # Add include paths
