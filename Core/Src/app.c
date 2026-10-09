@@ -23,6 +23,14 @@
 #define APP_CUBE_ANGULAR_VELOCITY_X_RAD_S 0.55f
 #define APP_CUBE_ANGULAR_VELOCITY_Y_RAD_S 0.85f
 
+#define APP_CUBE_SCALE_X       1.0f
+#define APP_CUBE_SCALE_Y       0.3f
+#define APP_CUBE_SCALE_Z       1.0f
+
+#define APP_CUBE_POSITION_X    0.9f
+#define APP_CUBE_POSITION_Y    0.0f
+#define APP_CUBE_POSITION_Z    0.0f
+
 static pcd8544_transport_t lcd_transport;
 static pcd8544_t lcd;
 static display_t display;
@@ -92,11 +100,16 @@ static bool app_render_and_flush(const app_t *app)
     int16_t screen_x[GEOMETRY3D_CUBE_VERTEX_COUNT];
     int16_t screen_y[GEOMETRY3D_CUBE_VERTEX_COUNT];
 
+    
     /*
-     * Build rotation matrices for this frame.
+     * Build individual transformation matrices.
      */
     matrix4_t rotation_x;
     matrix4_t rotation_y;
+    matrix4_t rotation;
+    matrix4_t scale;
+    matrix4_t translation;
+    matrix4_t rotated_scaled;
     matrix4_t transform;
 
     matrix4_set_rotation_x(
@@ -107,14 +120,49 @@ static bool app_render_and_flush(const app_t *app)
         &rotation_y,
         app->cube.angle_y_rad);
 
+    matrix4_set_scale(
+        &scale,
+        APP_CUBE_SCALE_X,
+        APP_CUBE_SCALE_Y,
+        APP_CUBE_SCALE_Z);
+
+    matrix4_set_translation(
+        &translation,
+        APP_CUBE_POSITION_X,
+        APP_CUBE_POSITION_Y,
+        APP_CUBE_POSITION_Z);
+
     /*
-     * With column vectors, Rx * Ry applies Y first,
-     * then X.
+     * Compose rotation: first Y, then X.
+     */
+    if (!matrix4_multiply(
+            &rotation,
+            &rotation_x,
+            &rotation_y))
+    {
+        return false;
+    }
+
+    /*
+     * Apply scale first, then rotation.
+     */
+    if (!matrix4_multiply(
+            &rotated_scaled,
+            &rotation,
+            &scale))
+    {
+        return false;
+    }
+
+    /*
+     * Apply translation last.
+     *
+     * Final transform: T * Rx * Ry * S
      */
     if (!matrix4_multiply(
             &transform,
-            &rotation_x,
-            &rotation_y))
+            &translation,
+            &rotated_scaled))
     {
         return false;
     }

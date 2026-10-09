@@ -28,4 +28,16 @@ void matrix4_set_rotation_x(matrix4_t *matrix, float angle_rad);
 void matrix4_set_rotation_y(matrix4_t *matrix, float angle_rad);
 void matrix4_set_rotation_z(matrix4_t *matrix, float angle_rad);
 
+void matrix4_set_scale(
+    matrix4_t *matrix,
+    float scale_x,
+    float scale_y,
+    float scale_z);
+
+void matrix4_set_translation(
+    matrix4_t *matrix,
+    float translate_x,
+    float translate_y,
+    float translate_z);
+
 #endif /* MATRIX4_H */

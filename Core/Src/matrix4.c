@@ -111,3 +111,39 @@ void matrix4_set_rotation_z(matrix4_t *matrix, float angle_rad)
     matrix->m[1][0] = s;
     matrix->m[1][1] = c;
 }
+
+void matrix4_set_scale(
+    matrix4_t *matrix,
+    float scale_x,
+    float scale_y,
+    float scale_z)
+{
+    if (matrix == NULL)
+    {
+        return;
+    }
+
+    matrix4_set_identity(matrix);
+
+    matrix->m[0][0] = scale_x;
+    matrix->m[1][1] = scale_y;
+    matrix->m[2][2] = scale_z;
+}
+
+void matrix4_set_translation(
+    matrix4_t *matrix,
+    float translate_x,
+    float translate_y,
+    float translate_z)
+{
+    if (matrix == NULL)
+    {
+        return;
+    }
+
+    matrix4_set_identity(matrix);
+
+    matrix->m[0][3] = translate_x;
+    matrix->m[1][3] = translate_y;
+    matrix->m[2][3] = translate_z;
+}
