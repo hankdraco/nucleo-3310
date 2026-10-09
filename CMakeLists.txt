@@ -52,6 +52,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/app.c
     Core/Src/projection.c
     Core/Src/geometry3d.c
+    Core/Src/matrix4.c
 )
 
 # Add include paths

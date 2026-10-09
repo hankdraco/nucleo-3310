@@ -12,6 +12,7 @@
 
 #include "geometry3d.h"
 #include "projection.h"
+#include "matrix4.h"
 
 #define APP_RENDER_INTERVAL_SECONDS       (1.0f / 30.0f)
 #define APP_TWO_PI_RAD                    6.28318530718f
@@ -85,10 +86,38 @@ static void app_update_angle(
     }
 }
 
+
 static bool app_render_and_flush(const app_t *app)
 {
     int16_t screen_x[GEOMETRY3D_CUBE_VERTEX_COUNT];
     int16_t screen_y[GEOMETRY3D_CUBE_VERTEX_COUNT];
+
+    /*
+     * Build rotation matrices for this frame.
+     */
+    matrix4_t rotation_x;
+    matrix4_t rotation_y;
+    matrix4_t transform;
+
+    matrix4_set_rotation_x(
+        &rotation_x,
+        app->cube.angle_x_rad);
+
+    matrix4_set_rotation_y(
+        &rotation_y,
+        app->cube.angle_y_rad);
+
+    /*
+     * With column vectors, Rx * Ry applies Y first,
+     * then X.
+     */
+    if (!matrix4_multiply(
+            &transform,
+            &rotation_x,
+            &rotation_y))
+    {
+        return false;
+    }
 
     /*
      * Transform and project all vertices.
@@ -97,14 +126,15 @@ static bool app_render_and_flush(const app_t *app)
          i < GEOMETRY3D_CUBE_VERTEX_COUNT;
          ++i)
     {
-        geometry3d_vertex_t vertex =
-            geometry3d_rotate_y(
-                &cube_model.vertices[i],
-                app->cube.angle_y_rad);
+        geometry3d_vertex_t vertex;
 
-        vertex = geometry3d_rotate_x(
-            &vertex,
-            app->cube.angle_x_rad);
+        if (!geometry3d_transform_vertex(
+                &transform,
+                &cube_model.vertices[i],
+                &vertex))
+        {
+            return false;
+        }
 
         if (!projection_perspective_project(
                 &cube_projection,
@@ -122,7 +152,7 @@ static bool app_render_and_flush(const app_t *app)
     display_clear(&display);
 
     /*
-     * Draw all cube edges using projected vertices.
+     * Draw all cube edges.
      */
     for (size_t i = 0U;
          i < GEOMETRY3D_CUBE_EDGE_COUNT;

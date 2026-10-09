@@ -1,38 +1,39 @@
 
+#include <stddef.h>
+
 #include "geometry3d.h"
 
-#include <math.h>
-
-geometry3d_vertex_t geometry3d_rotate_y(
+bool geometry3d_transform_vertex(
+    const matrix4_t *transform,
     const geometry3d_vertex_t *vertex,
-    float angle_rad)
+    geometry3d_vertex_t *result)
 {
-    const float sin_angle = sinf(angle_rad);
-    const float cos_angle = cosf(angle_rad);
-
-    geometry3d_vertex_t result =
+    if (transform == NULL ||
+        vertex == NULL ||
+        result == NULL)
     {
-        .x = vertex->x * cos_angle + vertex->z * sin_angle,
-        .y = vertex->y,
-        .z = -vertex->x * sin_angle + vertex->z * cos_angle
+        return false;
+    }
+
+    geometry3d_vertex_t transformed =
+    {
+        .x = transform->m[0][0] * vertex->x
+           + transform->m[0][1] * vertex->y
+           + transform->m[0][2] * vertex->z
+           + transform->m[0][3],
+
+        .y = transform->m[1][0] * vertex->x
+           + transform->m[1][1] * vertex->y
+           + transform->m[1][2] * vertex->z
+           + transform->m[1][3],
+
+        .z = transform->m[2][0] * vertex->x
+           + transform->m[2][1] * vertex->y
+           + transform->m[2][2] * vertex->z
+           + transform->m[2][3]
     };
 
-    return result;
-}
+    *result = transformed;
 
-geometry3d_vertex_t geometry3d_rotate_x(
-    const geometry3d_vertex_t *vertex,
-    float angle_rad)
-{
-    const float sin_angle = sinf(angle_rad);
-    const float cos_angle = cosf(angle_rad);
-
-    geometry3d_vertex_t result =
-    {
-        .x = vertex->x,
-        .y = vertex->y * cos_angle - vertex->z * sin_angle,
-        .z = vertex->y * sin_angle + vertex->z * cos_angle
-    };
-
-    return result;
+    return true;
 }

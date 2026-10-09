@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+#include "matrix4.h"
+
 typedef struct
 {
     float x;
@@ -27,12 +29,9 @@ typedef struct
 } geometry3d_cube_t;
 
 
-geometry3d_vertex_t geometry3d_rotate_y(
+bool geometry3d_transform_vertex(
+    const matrix4_t *transform,
     const geometry3d_vertex_t *vertex,
-    float angle_rad);
-
-geometry3d_vertex_t geometry3d_rotate_x(
-    const geometry3d_vertex_t *vertex,
-    float angle_rad);
+    geometry3d_vertex_t *result);
 
 #endif
