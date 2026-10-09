@@ -124,9 +124,19 @@ int main(void)
       Error_Handler();
   }
 
+  uint32_t last_tick_ms = HAL_GetTick();
+
   while (1)
   {
-    app_run(&app);
+    uint32_t now_ms = HAL_GetTick();
+
+    uint32_t elapsed_ms = now_ms - last_tick_ms;
+
+    last_tick_ms = now_ms;
+
+    float dt_seconds = (float)elapsed_ms / 1000.0f;
+
+    app_run(&app, dt_seconds);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
