@@ -3,21 +3,22 @@
 
 #include <stdbool.h>
 
-#include "geometry3d.h"
+#include "scene3d.h"
 
 typedef struct
 {
     float angular_velocity_x_rad_s;
     float angular_velocity_y_rad_s;
     float angular_velocity_z_rad_s;
-} app_cube_animation_t;
+} app_instance_animation_t;
 
 typedef struct
 {
     float render_accumulator_seconds;
 
-    geometry3d_instance_t cube;
-    app_cube_animation_t cube_animation;
+    scene3d_t scene;
+
+    app_instance_animation_t animations[SCENE3D_MAX_INSTANCES];
 
 } app_t;
 
