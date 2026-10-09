@@ -46,7 +46,8 @@ static display_t display;
 static const projection_perspective_t cube_projection =
 {
     .focal_length = 48.0f,
-    .camera_distance = 6.0f - 1.0f,
+    .camera_distance = 5.0f,
+    .near_plane = 0.1f,
     .center_x = (float)(DISPLAY_WIDTH / 2U),
     .center_y = (float)(DISPLAY_HEIGHT / 2U)
 };
@@ -105,9 +106,10 @@ bool app_init(app_t *app)
         .model = &geometry3d_cube_model,
         .transform =
         {
-            .position = { .x = -1.1f, .y = 0.0f, .z = 0.0f },
+            .position = { .x = -1.1f, .y = 0.0f, .z = -1.0f },
             .rotation_rad = { .x = 0.55f, .y = 0.65f, .z = 0.0f },
-            .scale = { .x = 0.6f, .y = 0.6f, .z = 0.6f }
+            //.scale = { .x = 0.6f, .y = 0.6f, .z = 0.6f }
+            .scale = { .x = 0.6f, .y = 2.6f, .z = 0.6f }
         }
     };
 
@@ -116,9 +118,11 @@ bool app_init(app_t *app)
         .model = &geometry3d_cube_model,
         .transform =
         {
-            .position = { .x = 1.1f, .y = 0.15f, .z = 1.2f },
+            //.position = { .x = 1.1f, .y = 0.15f, .z = 1.2f },
+            .position = { .x = 5.1f, .y = 0.15f, .z = 1.2f },
             .rotation_rad = { .x = 0.25f, .y = -0.4f, .z = 0.2f },
-            .scale = { .x = 0.4f, .y = 0.4f, .z = 0.4f }
+            //.scale = { .x = 0.4f, .y = 0.4f, .z = 0.4f }
+            .scale = { .x = 1.4f, .y = 1.4f, .z = 1.4f }
         }
     };
 
