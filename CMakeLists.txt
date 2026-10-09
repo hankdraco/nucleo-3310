@@ -50,6 +50,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/display.c
     Core/Src/display_pcd8544.c
     Core/Src/app.c
+    Core/Src/projection.c
+    Core/Src/geometry3d.c
 )
 
 # Add include paths

@@ -5,17 +5,19 @@
 
 typedef struct
 {
-    float angle_rad;
-    float angular_velocity_rad_s;
+    float angle_x_rad;
+    float angular_velocity_x_rad_s;
 
-} app_line_animation_t;
+    float angle_y_rad;
+    float angular_velocity_y_rad_s;
 
+} app_cube_animation_t;
 
 typedef struct
 {
     float render_accumulator_seconds;
 
-    app_line_animation_t line;
+    app_cube_animation_t cube;
 
 } app_t;
 

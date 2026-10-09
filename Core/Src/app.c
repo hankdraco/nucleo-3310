@@ -1,70 +1,168 @@
+
 #include "app.h"
 
-#include <stdint.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "display.h"
 #include "display_pcd8544.h"
 #include "pcd8544.h"
 #include "pcd8544_transport.h"
 
-#define APP_RENDER_INTERVAL_SECONDS (1.0f / 30.0f)
-#define APP_TWO_PI_RAD              6.28318530718f
-#define APP_LINE_RADIUS_PIXELS      20.0f
+#include "geometry3d.h"
+#include "projection.h"
+
+#define APP_RENDER_INTERVAL_SECONDS       (1.0f / 30.0f)
+#define APP_TWO_PI_RAD                    6.28318530718f
+
+#define APP_CUBE_INITIAL_ANGLE_X_RAD      0.55f
+#define APP_CUBE_INITIAL_ANGLE_Y_RAD      0.65f
+
+#define APP_CUBE_ANGULAR_VELOCITY_X_RAD_S 0.55f
+#define APP_CUBE_ANGULAR_VELOCITY_Y_RAD_S 0.85f
 
 static pcd8544_transport_t lcd_transport;
 static pcd8544_t lcd;
 static display_t display;
 
-static void draw_demo(void)
+static const projection_perspective_t cube_projection =
 {
-    display_draw_line(&display, 0, 0, 83, 0);
-    display_draw_line(&display, 83, 0, 83, 47);
-    display_draw_line(&display, 83, 47, 0, 47);
-    display_draw_line(&display, 0, 47, 0, 0);
+    .focal_length = 48.0f,
+    .camera_distance = 6.0f - 1.0f,
+    .center_x = (float)(DISPLAY_WIDTH / 2U),
+    .center_y = (float)(DISPLAY_HEIGHT / 2U)
+};
 
-    display_draw_line(&display, 0, 0, 83, 47);
-    display_draw_line(&display, 83, 0, 0, 47);
+static const geometry3d_cube_t cube_model =
+{
+    .vertices =
+    {
+        { -1.0f, -1.0f, -1.0f },
+        {  1.0f, -1.0f, -1.0f },
+        {  1.0f,  1.0f, -1.0f },
+        { -1.0f,  1.0f, -1.0f },
+
+        { -1.0f, -1.0f,  1.0f },
+        {  1.0f, -1.0f,  1.0f },
+        {  1.0f,  1.0f,  1.0f },
+        { -1.0f,  1.0f,  1.0f }
+    },
+    .edges =
+    {
+        /* Face at z = -1 */
+        { 0U, 1U },
+        { 1U, 2U },
+        { 2U, 3U },
+        { 3U, 0U },
+
+        /* Face at z = +1 */
+        { 4U, 5U },
+        { 5U, 6U },
+        { 6U, 7U },
+        { 7U, 4U },
+
+        /* Connect both faces */
+        { 0U, 4U },
+        { 1U, 5U },
+        { 2U, 6U },
+        { 3U, 7U }
+    }
+};
+
+static void app_update_angle(
+    float *angle_rad,
+    float angular_velocity_rad_s,
+    float dt_seconds)
+{
+    *angle_rad += angular_velocity_rad_s * dt_seconds;
+
+    *angle_rad = fmodf(*angle_rad, APP_TWO_PI_RAD);
+
+    if (*angle_rad < 0.0f)
+    {
+        *angle_rad += APP_TWO_PI_RAD;
+    }
 }
 
 static bool app_render_and_flush(const app_t *app)
 {
-    const int16_t center_x = (int16_t)(DISPLAY_WIDTH / 2U);
-    const int16_t center_y = (int16_t)(DISPLAY_HEIGHT / 2U);
+    int16_t screen_x[GEOMETRY3D_CUBE_VERTEX_COUNT];
+    int16_t screen_y[GEOMETRY3D_CUBE_VERTEX_COUNT];
 
-    float angle = app->line.angle_rad;
-
-    int16_t endpoint_x = (int16_t)lroundf(
-        (float)center_x +
-        APP_LINE_RADIUS_PIXELS * cosf(angle)
-    );
-
-    int16_t endpoint_y = (int16_t)lroundf(
-        (float)center_y +
-        APP_LINE_RADIUS_PIXELS * sinf(angle)
-    );
-
-    display_clear(&display);
-
-    if (!display_draw_line(
-            &display,
-            center_x,
-            center_y,
-            endpoint_x,
-            endpoint_y))
+    /*
+     * Transform and project all vertices.
+     */
+    for (size_t i = 0U;
+         i < GEOMETRY3D_CUBE_VERTEX_COUNT;
+         ++i)
     {
-        return false;
+        geometry3d_vertex_t vertex =
+            geometry3d_rotate_y(
+                &cube_model.vertices[i],
+                app->cube.angle_y_rad);
+
+        vertex = geometry3d_rotate_x(
+            &vertex,
+            app->cube.angle_x_rad);
+
+        if (!projection_perspective_project(
+                &cube_projection,
+                &vertex,
+                &screen_x[i],
+                &screen_y[i]))
+        {
+            return false;
+        }
     }
 
+    /*
+     * Clear the previous frame.
+     */
+    display_clear(&display);
+
+    /*
+     * Draw all cube edges using projected vertices.
+     */
+    for (size_t i = 0U;
+         i < GEOMETRY3D_CUBE_EDGE_COUNT;
+         ++i)
+    {
+        const geometry3d_edge_t *edge = &cube_model.edges[i];
+
+        if (!display_draw_line(
+                &display,
+                screen_x[edge->start],
+                screen_y[edge->start],
+                screen_x[edge->end],
+                screen_y[edge->end]))
+        {
+            return false;
+        }
+    }
+
+    /*
+     * Transfer the completed canvas to the LCD.
+     */
     return display_pcd8544_flush(&display, &lcd);
 }
 
 bool app_init(app_t *app)
 {
+    if (app == NULL)
+    {
+        return false;
+    }
+
     app->render_accumulator_seconds = 0.0f;
 
-    app->line.angle_rad = 0.0f;
-    app->line.angular_velocity_rad_s = APP_TWO_PI_RAD / 60.0f;
+    app->cube.angle_x_rad = APP_CUBE_INITIAL_ANGLE_X_RAD;
+    app->cube.angular_velocity_x_rad_s =
+        APP_CUBE_ANGULAR_VELOCITY_X_RAD_S;
+
+    app->cube.angle_y_rad = APP_CUBE_INITIAL_ANGLE_Y_RAD;
+    app->cube.angular_velocity_y_rad_s =
+        APP_CUBE_ANGULAR_VELOCITY_Y_RAD_S;
 
     pcd8544_transport_stm32_init(&lcd_transport);
 
@@ -92,32 +190,26 @@ bool app_init(app_t *app)
 
 bool app_run(app_t *app, float dt_seconds)
 {
+    if (app == NULL || dt_seconds < 0.0f)
+    {
+        return false;
+    }
+
     if (dt_seconds > 0.0f)
     {
         /*
-         * Update animation state.
+         * Update the animation independently of rendering.
          */
-        app->line.angle_rad +=
-            app->line.angular_velocity_rad_s * dt_seconds;
+        app_update_angle(
+            &app->cube.angle_x_rad,
+            app->cube.angular_velocity_x_rad_s,
+            dt_seconds);
 
-        /*
-         * Keep angle in the range [0, 2*pi).
-         */
-        if (app->line.angle_rad >= APP_TWO_PI_RAD ||
-            app->line.angle_rad < 0.0f)
-        {
-            app->line.angle_rad =
-                fmodf(app->line.angle_rad, APP_TWO_PI_RAD);
+        app_update_angle(
+            &app->cube.angle_y_rad,
+            app->cube.angular_velocity_y_rad_s,
+            dt_seconds);
 
-            if (app->line.angle_rad < 0.0f)
-            {
-                app->line.angle_rad += APP_TWO_PI_RAD;
-            }
-        }
-
-        /*
-         * Accumulate elapsed time for rendering.
-         */
         app->render_accumulator_seconds += dt_seconds;
     }
 
@@ -132,7 +224,7 @@ bool app_run(app_t *app, float dt_seconds)
 
     /*
      * Discard missed frame intervals while preserving the remainder.
-     * We render only the latest animation state.
+     * Render only the latest animation state.
      */
     app->render_accumulator_seconds -=
         floorf(
