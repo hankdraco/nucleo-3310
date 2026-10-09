@@ -13,6 +13,7 @@
 #include "geometry3d.h"
 #include "projection.h"
 #include "matrix4.h"
+#include "cube_model.h"
 
 #define APP_RENDER_INTERVAL_SECONDS       (1.0f / 30.0f)
 #define APP_TWO_PI_RAD                    6.28318530718f
@@ -27,9 +28,11 @@
 #define APP_CUBE_SCALE_Y       0.3f
 #define APP_CUBE_SCALE_Z       1.0f
 
-#define APP_CUBE_POSITION_X    0.9f
+#define APP_CUBE_POSITION_X    0.0f
 #define APP_CUBE_POSITION_Y    0.0f
 #define APP_CUBE_POSITION_Z    0.0f
+
+#define APP_MAX_MODEL_VERTICES 64U
 
 static pcd8544_transport_t lcd_transport;
 static pcd8544_t lcd;
@@ -41,42 +44,6 @@ static const projection_perspective_t cube_projection =
     .camera_distance = 6.0f - 1.0f,
     .center_x = (float)(DISPLAY_WIDTH / 2U),
     .center_y = (float)(DISPLAY_HEIGHT / 2U)
-};
-
-static const geometry3d_cube_t cube_model =
-{
-    .vertices =
-    {
-        { -1.0f, -1.0f, -1.0f },
-        {  1.0f, -1.0f, -1.0f },
-        {  1.0f,  1.0f, -1.0f },
-        { -1.0f,  1.0f, -1.0f },
-
-        { -1.0f, -1.0f,  1.0f },
-        {  1.0f, -1.0f,  1.0f },
-        {  1.0f,  1.0f,  1.0f },
-        { -1.0f,  1.0f,  1.0f }
-    },
-    .edges =
-    {
-        /* Face at z = -1 */
-        { 0U, 1U },
-        { 1U, 2U },
-        { 2U, 3U },
-        { 3U, 0U },
-
-        /* Face at z = +1 */
-        { 4U, 5U },
-        { 5U, 6U },
-        { 6U, 7U },
-        { 7U, 4U },
-
-        /* Connect both faces */
-        { 0U, 4U },
-        { 1U, 5U },
-        { 2U, 6U },
-        { 3U, 7U }
-    }
 };
 
 static void app_update_angle(
@@ -97,67 +64,86 @@ static void app_update_angle(
 
 static bool app_render_and_flush(const app_t *app)
 {
-    int16_t screen_x[GEOMETRY3D_CUBE_VERTEX_COUNT];
-    int16_t screen_y[GEOMETRY3D_CUBE_VERTEX_COUNT];
+    const geometry3d_instance_t *instance = &app->cube;
+    const geometry3d_model_t *model = instance->model;
 
+    int16_t screen_x[APP_MAX_MODEL_VERTICES];
+    int16_t screen_y[APP_MAX_MODEL_VERTICES];
+    
     
     /*
      * Build individual transformation matrices.
      */
     matrix4_t rotation_x;
     matrix4_t rotation_y;
-    matrix4_t rotation;
+    matrix4_t rotation_z;
+
     matrix4_t scale;
     matrix4_t translation;
+
+    matrix4_t rotation_yx;
+    matrix4_t rotation_zyx;
     matrix4_t rotated_scaled;
     matrix4_t transform;
 
     matrix4_set_rotation_x(
         &rotation_x,
-        app->cube.angle_x_rad);
+        app->cube.transform.rotation_rad.x);
 
     matrix4_set_rotation_y(
         &rotation_y,
-        app->cube.angle_y_rad);
+        app->cube.transform.rotation_rad.y);
+
+    matrix4_set_rotation_z(
+        &rotation_z,
+        app->cube.transform.rotation_rad.z);
 
     matrix4_set_scale(
         &scale,
-        APP_CUBE_SCALE_X,
-        APP_CUBE_SCALE_Y,
-        APP_CUBE_SCALE_Z);
+        app->cube.transform.scale.x,
+        app->cube.transform.scale.y,
+        app->cube.transform.scale.z);
 
     matrix4_set_translation(
         &translation,
-        APP_CUBE_POSITION_X,
-        APP_CUBE_POSITION_Y,
-        APP_CUBE_POSITION_Z);
+        app->cube.transform.position.x,
+        app->cube.transform.position.y,
+        app->cube.transform.position.z);
 
     /*
-     * Compose rotation: first Y, then X.
+     * Rotation order: Y, then X, then Z.
      */
     if (!matrix4_multiply(
-            &rotation,
+            &rotation_yx,
             &rotation_x,
             &rotation_y))
     {
         return false;
     }
 
+    if (!matrix4_multiply(
+            &rotation_zyx,
+            &rotation_z,
+            &rotation_yx))
+    {
+        return false;
+    }
+
     /*
-     * Apply scale first, then rotation.
+     * Scale first, then rotate.
      */
     if (!matrix4_multiply(
             &rotated_scaled,
-            &rotation,
+            &rotation_zyx,
             &scale))
     {
         return false;
     }
 
     /*
-     * Apply translation last.
+     * Translate last.
      *
-     * Final transform: T * Rx * Ry * S
+     * M = T * Rz * Rx * Ry * S
      */
     if (!matrix4_multiply(
             &transform,
@@ -170,15 +156,13 @@ static bool app_render_and_flush(const app_t *app)
     /*
      * Transform and project all vertices.
      */
-    for (size_t i = 0U;
-         i < GEOMETRY3D_CUBE_VERTEX_COUNT;
-         ++i)
+    for (size_t i = 0U; i < model->vertex_count; ++i)
     {
         geometry3d_vertex_t vertex;
 
         if (!geometry3d_transform_vertex(
                 &transform,
-                &cube_model.vertices[i],
+                &model->vertices[i],
                 &vertex))
         {
             return false;
@@ -202,11 +186,9 @@ static bool app_render_and_flush(const app_t *app)
     /*
      * Draw all cube edges.
      */
-    for (size_t i = 0U;
-         i < GEOMETRY3D_CUBE_EDGE_COUNT;
-         ++i)
+    for (size_t i = 0U; i < model->edge_count; ++i)
     {
-        const geometry3d_edge_t *edge = &cube_model.edges[i];
+        const geometry3d_edge_t *edge = &model->edges[i];
 
         if (!display_draw_line(
                 &display,
@@ -234,13 +216,42 @@ bool app_init(app_t *app)
 
     app->render_accumulator_seconds = 0.0f;
 
-    app->cube.angle_x_rad = APP_CUBE_INITIAL_ANGLE_X_RAD;
-    app->cube.angular_velocity_x_rad_s =
+    /* Select the model used by this instance. */
+    app->cube.model = &geometry3d_cube_model;
+
+    if (!geometry3d_model_is_valid(app->cube.model) ||
+        app->cube.model->vertex_count > APP_MAX_MODEL_VERTICES)
+    {
+        return false;
+    }
+
+    /* Initial position in world coordinates. */
+    app->cube.transform.position.x = APP_CUBE_POSITION_X;
+    app->cube.transform.position.y = APP_CUBE_POSITION_Y;
+    app->cube.transform.position.z = APP_CUBE_POSITION_Z;
+
+    /* Initial rotation in radians. */
+    app->cube.transform.rotation_rad.x =
+        APP_CUBE_INITIAL_ANGLE_X_RAD;
+
+    app->cube.transform.rotation_rad.y =
+        APP_CUBE_INITIAL_ANGLE_Y_RAD;
+
+    app->cube.transform.rotation_rad.z = 0.35f;
+
+    /* Initial scale. */
+    app->cube.transform.scale.x = APP_CUBE_SCALE_X;
+    app->cube.transform.scale.y = APP_CUBE_SCALE_Y;
+    app->cube.transform.scale.z = APP_CUBE_SCALE_Z;
+
+    /* Animation velocities. */
+    app->cube_animation.angular_velocity_x_rad_s =
         APP_CUBE_ANGULAR_VELOCITY_X_RAD_S;
 
-    app->cube.angle_y_rad = APP_CUBE_INITIAL_ANGLE_Y_RAD;
-    app->cube.angular_velocity_y_rad_s =
+    app->cube_animation.angular_velocity_y_rad_s =
         APP_CUBE_ANGULAR_VELOCITY_Y_RAD_S;
+
+    app->cube_animation.angular_velocity_z_rad_s = 0.0f;
 
     pcd8544_transport_stm32_init(&lcd_transport);
 
@@ -279,13 +290,18 @@ bool app_run(app_t *app, float dt_seconds)
          * Update the animation independently of rendering.
          */
         app_update_angle(
-            &app->cube.angle_x_rad,
-            app->cube.angular_velocity_x_rad_s,
+            &app->cube.transform.rotation_rad.x,
+            app->cube_animation.angular_velocity_x_rad_s,
             dt_seconds);
 
         app_update_angle(
-            &app->cube.angle_y_rad,
-            app->cube.angular_velocity_y_rad_s,
+            &app->cube.transform.rotation_rad.y,
+            app->cube_animation.angular_velocity_y_rad_s,
+            dt_seconds);
+
+        app_update_angle(
+            &app->cube.transform.rotation_rad.z,
+            app->cube_animation.angular_velocity_z_rad_s,
             dt_seconds);
 
         app->render_accumulator_seconds += dt_seconds;
