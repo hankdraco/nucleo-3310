@@ -61,6 +61,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/rasterizer3d.c
     Core/Src/modifier3d.c
     Core/Src/scene_loader.c
+    Core/Src/city_models.c
 )
 
 # Add include paths

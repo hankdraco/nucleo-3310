@@ -9,7 +9,7 @@
 #include "projection.h"
 #include "depth_buffer.h"
 
-#define SCENE3D_MAX_INSTANCES 8U
+#define SCENE3D_MAX_INSTANCES 64U
 
 #define SCENE3D_NO_PARENT_INDEX ((size_t)-1)
 

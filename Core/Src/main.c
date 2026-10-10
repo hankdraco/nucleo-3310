@@ -117,7 +117,7 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  app_t app;
+  static app_t app;
 
   if (!app_init(&app))
   {
