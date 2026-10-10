@@ -27,6 +27,13 @@ typedef struct
     uint16_t end;
 } geometry3d_edge_t;
 
+typedef struct
+{
+    uint16_t a;
+    uint16_t b;
+    uint16_t c;
+} geometry3d_triangle_t;
+
 /*
  * Immutable geometry description.
  * Does not contain instance-specific transformations.
@@ -38,6 +45,9 @@ typedef struct
 
     const geometry3d_edge_t *edges;
     size_t edge_count;
+
+    const geometry3d_triangle_t *triangles;
+    size_t triangle_count;
 } geometry3d_model_t;
 
 typedef struct

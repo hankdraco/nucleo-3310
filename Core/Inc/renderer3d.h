@@ -7,6 +7,7 @@
 #include "geometry3d.h"
 #include "projection.h"
 #include "matrix4.h"
+#include "depth_buffer.h"
 
 /*
  * Maximum number of vertices supported by this renderer.
@@ -20,6 +21,18 @@
  */
 bool renderer3d_draw_instance(
     display_t *canvas,
+    const depth_buffer_t *depth_buffer,
+    const geometry3d_instance_t *instance,
+    const matrix4_t *view_matrix,
+    const projection_perspective_t *projection);
+
+/*
+ * Rasterize all triangles of an instance into the depth buffer.
+ *
+ * Does not modify the display framebuffer.
+ */
+bool renderer3d_rasterize_instance(
+    depth_buffer_t *depth_buffer,
     const geometry3d_instance_t *instance,
     const matrix4_t *view_matrix,
     const projection_perspective_t *projection);

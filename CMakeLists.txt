@@ -57,6 +57,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/renderer3d.c
     Core/Src/scene3d.c
     Core/Src/camera3d.c
+    Core/Src/depth_buffer.c
+    Core/Src/rasterizer3d.c
 )
 
 # Add include paths

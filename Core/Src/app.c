@@ -15,6 +15,7 @@
 #include "cube_model.h"
 #include "renderer3d.h"
 #include "scene3d.h"
+#include "depth_buffer.h"
 
 #define APP_RENDER_INTERVAL_SECONDS       (1.0f / 30.0f)
 #define APP_TWO_PI_RAD                    6.28318530718f
@@ -41,6 +42,8 @@
 static pcd8544_transport_t lcd_transport;
 static pcd8544_t lcd;
 static display_t display;
+
+static depth_buffer_t scene_depth_buffer;
 
 static const projection_perspective_t cube_projection =
 {
@@ -81,6 +84,7 @@ static bool app_render_and_flush(const app_t *app)
     if (!scene3d_render(
             &app->scene,
             &display,
+            &scene_depth_buffer,
             &view_matrix,
             &cube_projection))
     {

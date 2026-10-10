@@ -1,8 +1,7 @@
-
 #include <stddef.h>
+#include <stdint.h>
 
 #include "geometry3d.h"
-
 
 bool geometry3d_model_is_valid(
     const geometry3d_model_t *model)
@@ -15,7 +14,7 @@ bool geometry3d_model_is_valid(
     }
 
     /*
-     * Edge indices are uint16_t.
+     * Vertex indices are uint16_t.
      */
     if (model->vertex_count >
         (size_t)UINT16_MAX + 1U)
@@ -29,12 +28,37 @@ bool geometry3d_model_is_valid(
         return false;
     }
 
+    if (model->triangle_count > 0U &&
+        model->triangles == NULL)
+    {
+        return false;
+    }
+
+    /*
+     * Validate edge vertex indices.
+     */
     for (size_t i = 0U; i < model->edge_count; ++i)
     {
         const geometry3d_edge_t *edge = &model->edges[i];
 
         if (edge->start >= model->vertex_count ||
             edge->end >= model->vertex_count)
+        {
+            return false;
+        }
+    }
+
+    /*
+     * Validate triangle vertex indices.
+     */
+    for (size_t i = 0U; i < model->triangle_count; ++i)
+    {
+        const geometry3d_triangle_t *triangle =
+            &model->triangles[i];
+
+        if (triangle->a >= model->vertex_count ||
+            triangle->b >= model->vertex_count ||
+            triangle->c >= model->vertex_count)
         {
             return false;
         }
