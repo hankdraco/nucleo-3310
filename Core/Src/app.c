@@ -102,11 +102,22 @@ bool app_init(app_t *app)
         return false;
     }
 
-    /*
-    * Preserve the original camera position:
-    * (0, 0, -5), looking along positive Z.
-    */
+    /* Test camera position. */
+    app->camera.position.x = -4.0f;
     app->camera.position.z = -5.0f;
+
+    /* Aim at the center of the near cube. */
+    const geometry3d_vector3_t target =
+    {
+        .x = -1.1f,
+        .y = 0.0f,
+        .z = -1.0f
+    };
+
+    if (!camera3d_set_target(&app->camera, &target))
+    {
+        return false;
+    }
 
     app->render_accumulator_seconds = 0.0f;
 
