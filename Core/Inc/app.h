@@ -3,14 +3,17 @@
 
 #include <stdbool.h>
 
-#include "scene3d.h"
 #include "camera3d.h"
+#include "projection.h"
+#include "scene3d.h"
 
 typedef struct
 {
     float render_accumulator_seconds;
-    camera3d_t camera;
+
     scene3d_t scene;
+    camera3d_t camera;
+    projection_perspective_t projection;
 } app_t;
 
 bool app_init(app_t *app);
