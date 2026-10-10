@@ -10,6 +10,55 @@
 #define SCENE_LOADER_NEAR_CUBE_INDEX 0U
 #define SCENE_LOADER_FAR_CUBE_INDEX  1U
 
+#define SCENE_LOADER_ATTACHMENT_COUNT 6U
+
+static const geometry3d_vector3_t
+    scene_loader_attachment_positions[
+        SCENE_LOADER_ATTACHMENT_COUNT] =
+{
+    /* Child on the +X face. */
+    { .x =  1.15f, .y =  0.0f, .z =  0.0f },
+
+    /* Child on the -X face. */
+    { .x = -1.15f, .y =  0.0f, .z =  0.0f },
+
+    /* Child on the +Y face. */
+    { .x =  0.0f, .y =  1.15f, .z =  0.0f },
+
+    /* Child on the -Y face. */
+    { .x =  0.0f, .y = -1.15f, .z =  0.0f },
+
+    /* Child on the +Z face. */
+    { .x =  0.0f, .y =  0.0f, .z =  1.15f },
+
+    /* Child on the -Z face. */
+    { .x =  0.0f, .y =  0.0f, .z = -1.15f }
+};
+
+static const modifier3d_target_t
+    scene_loader_attachment_rotation_axes[
+        SCENE_LOADER_ATTACHMENT_COUNT] =
+{
+    MODIFIER3D_TARGET_ROTATION_X,
+    MODIFIER3D_TARGET_ROTATION_X,
+    MODIFIER3D_TARGET_ROTATION_Y,
+    MODIFIER3D_TARGET_ROTATION_Y,
+    MODIFIER3D_TARGET_ROTATION_Z,
+    MODIFIER3D_TARGET_ROTATION_Z
+};
+
+static const float
+    scene_loader_attachment_rotation_speeds[
+        SCENE_LOADER_ATTACHMENT_COUNT] =
+{
+     0.60f,
+    -0.45f,
+     0.55f,
+    -0.70f,
+     0.65f,
+    -0.50f
+};
+
 static bool scene_loader_add_rotation_modifiers(
     geometry3d_instance_t *instance,
     float speed_x,
@@ -93,6 +142,28 @@ static bool scene_loader_add_pulsating_scale_modifiers(
            modifier3d_add(instance, &scale_z);
 }
 
+static bool scene_loader_add_rotation_modifier(
+    geometry3d_instance_t *instance,
+    modifier3d_target_t target,
+    float speed)
+{
+    if (instance == NULL)
+    {
+        return false;
+    }
+
+    const modifier3d_config_t config =
+    {
+        .target = target,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -SCENE_LOADER_PI_RAD,
+        .max_value = SCENE_LOADER_PI_RAD,
+        .speed = speed
+    };
+
+    return modifier3d_add(instance, &config);
+}
+
 bool scene_loader_load(
     scene3d_t *scene,
     camera3d_t *camera,
@@ -145,6 +216,88 @@ bool scene_loader_load(
     {
         goto fail;
     }
+    
+    /*
+     * Add six child cubes around the far cube.
+     *
+     * Root indices remain:
+     *   0: near cube
+     *   1: far cube
+     *
+     * Child indices are assigned as the instances are added.
+     */
+    for (size_t i = 0U;
+         i < SCENE_LOADER_ATTACHMENT_COUNT;
+         ++i)
+    {
+        const geometry3d_instance_t child =
+        {
+            .model = &geometry3d_cube_model,
+            .transform =
+            {
+                .position =
+                {
+                    .x = scene_loader_attachment_positions[i].x *
+                        1.7f,
+
+                    .y = scene_loader_attachment_positions[i].y *
+                        1.7f,
+
+                    .z = scene_loader_attachment_positions[i].z *
+                        1.7f
+                },
+
+                .rotation_rad =
+                {
+                    .x = 0.0f,
+                    .y = 0.0f,
+                    .z = 0.0f
+                },
+
+                .scale =
+                {
+                    .x = 0.12f * 2.5f,
+                    .y = 0.12f * 2.5f,
+                    .z = 0.12f * 2.5f
+                }
+            }
+        };
+
+        const size_t child_index = scene->instance_count;
+
+        if (!scene3d_add_instance(scene, &child))
+        {
+            goto fail;
+        }
+
+        if (!scene3d_set_parent(
+                scene,
+                child_index,
+                SCENE_LOADER_FAR_CUBE_INDEX))
+        {
+            goto fail;
+        }
+
+        /*
+         * Configure the instance stored in the scene, not
+         * the temporary local copy above.
+         */
+        geometry3d_instance_t *child_instance =
+            scene3d_get_instance(scene, child_index);
+
+        if (child_instance == NULL)
+        {
+            goto fail;
+        }
+
+        if (!scene_loader_add_rotation_modifier(
+                child_instance,
+                scene_loader_attachment_rotation_axes[i],
+                scene_loader_attachment_rotation_speeds[i]))
+        {
+            goto fail;
+        }
+    }
 
     /*
      * Configure modifiers on the instances stored in the scene.
@@ -192,16 +345,16 @@ bool scene_loader_load(
     /*
      * Camera setup: preserve the successful look-at configuration.
      */
-    camera->position.x = -4.0f;
+    camera->position.x = 9.0f;
     camera->position.y = 0.0f;
     camera->position.z = -5.0f;
 
-    const geometry3d_vector3_t target =
-    {
-        .x = -1.1f,
-        .y = 0.0f,
-        .z = -1.0f
-    };
+    const geometry3d_vector3_t target = { .x = 5.1f, .y = 0.15f, .z = 1.2f };
+    // {
+    //     .x = -1.1f,
+    //     .y = 0.0f,
+    //     .z = -1.0f
+    // };
 
     if (!camera3d_set_target(camera, &target))
     {

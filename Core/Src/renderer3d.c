@@ -11,12 +11,14 @@
 
 static bool renderer3d_transform_instance_vertices(
     const geometry3d_instance_t *instance,
+    const matrix4_t *world_matrix,
     const matrix4_t *view_matrix,
     geometry3d_vertex_t transformed_vertices[
         RENDERER3D_MAX_VERTICES])
 {
     if (instance == NULL ||
         instance->model == NULL ||
+        world_matrix == NULL ||
         view_matrix == NULL ||
         transformed_vertices == NULL)
     {
@@ -31,76 +33,16 @@ static bool renderer3d_transform_instance_vertices(
         return false;
     }
 
-    matrix4_t rotation_x;
-    matrix4_t rotation_y;
-    matrix4_t rotation_z;
-    matrix4_t scale;
-    matrix4_t translation;
-
-    matrix4_t rotation_yx;
-    matrix4_t rotation_zyx;
-    matrix4_t rotated_scaled;
-    matrix4_t model_transform;
     matrix4_t camera_transform;
 
-    matrix4_set_rotation_x(
-        &rotation_x,
-        instance->transform.rotation_rad.x);
-
-    matrix4_set_rotation_y(
-        &rotation_y,
-        instance->transform.rotation_rad.y);
-
-    matrix4_set_rotation_z(
-        &rotation_z,
-        instance->transform.rotation_rad.z);
-
-    matrix4_set_scale(
-        &scale,
-        instance->transform.scale.x,
-        instance->transform.scale.y,
-        instance->transform.scale.z);
-
-    matrix4_set_translation(
-        &translation,
-        instance->transform.position.x,
-        instance->transform.position.y,
-        instance->transform.position.z);
-
     /*
-     * Model transformation:
-     * M = T * Rz * Rx * Ry * S
+     * The scene has already computed model-to-world, including
+     * every ancestor. Apply the world-to-camera transformation.
      */
     if (!matrix4_multiply(
-            &rotation_yx, &rotation_x, &rotation_y))
-    {
-        return false;
-    }
-
-    if (!matrix4_multiply(
-            &rotation_zyx, &rotation_z, &rotation_yx))
-    {
-        return false;
-    }
-
-    if (!matrix4_multiply(
-            &rotated_scaled, &rotation_zyx, &scale))
-    {
-        return false;
-    }
-
-    if (!matrix4_multiply(
-            &model_transform, &translation, &rotated_scaled))
-    {
-        return false;
-    }
-
-    /*
-     * Model-to-camera transformation:
-     * C = V * M
-     */
-    if (!matrix4_multiply(
-            &camera_transform, view_matrix, &model_transform))
+            &camera_transform,
+            view_matrix,
+            world_matrix))
     {
         return false;
     }
@@ -451,6 +393,7 @@ static bool renderer3d_draw_depth_tested_line(
 bool renderer3d_rasterize_instance(
     depth_buffer_t *depth_buffer,
     const geometry3d_instance_t *instance,
+    const matrix4_t *world_matrix,
     const matrix4_t *view_matrix,
     const projection_perspective_t *projection)
 {
@@ -479,9 +422,10 @@ bool renderer3d_rasterize_instance(
         RENDERER3D_MAX_VERTICES];
 
     if (!renderer3d_transform_instance_vertices(
-            instance,
-            view_matrix,
-            transformed_vertices))
+        instance,
+        world_matrix,
+        view_matrix,
+        transformed_vertices))
     {
         return false;
     }
@@ -513,6 +457,7 @@ bool renderer3d_draw_instance(
     display_t *canvas,
     const depth_buffer_t *depth_buffer,
     const geometry3d_instance_t *instance,
+    const matrix4_t *world_matrix,
     const matrix4_t *view_matrix,
     const projection_perspective_t *projection)
 {
@@ -520,6 +465,7 @@ bool renderer3d_draw_instance(
         depth_buffer == NULL ||
         instance == NULL ||
         instance->model == NULL ||
+        world_matrix == NULL ||
         view_matrix == NULL ||
         projection == NULL)
     {
@@ -538,110 +484,22 @@ bool renderer3d_draw_instance(
 
     const geometry3d_model_t *model = instance->model;
 
-    if (!geometry3d_model_is_valid(model) ||
-        model->vertex_count > RENDERER3D_MAX_VERTICES)
-    {
-        return false;
-    }
-
     /*
-     * Build the model transformation:
+     * Transform all model vertices into camera space.
      *
-     * M = T * Rz * Rx * Ry * S
-     */
-    matrix4_t rotation_x;
-    matrix4_t rotation_y;
-    matrix4_t rotation_z;
-
-    matrix4_t scale;
-    matrix4_t translation;
-
-    matrix4_t rotation_yx;
-    matrix4_t rotation_zyx;
-    matrix4_t rotated_scaled;
-    matrix4_t transform;
-
-    matrix4_set_rotation_x(
-        &rotation_x,
-        instance->transform.rotation_rad.x);
-
-    matrix4_set_rotation_y(
-        &rotation_y,
-        instance->transform.rotation_rad.y);
-
-    matrix4_set_rotation_z(
-        &rotation_z,
-        instance->transform.rotation_rad.z);
-
-    matrix4_set_scale(
-        &scale,
-        instance->transform.scale.x,
-        instance->transform.scale.y,
-        instance->transform.scale.z);
-
-    matrix4_set_translation(
-        &translation,
-        instance->transform.position.x,
-        instance->transform.position.y,
-        instance->transform.position.z);
-
-    if (!matrix4_multiply(
-            &rotation_yx,
-            &rotation_x,
-            &rotation_y))
-    {
-        return false;
-    }
-
-    if (!matrix4_multiply(
-            &rotation_zyx,
-            &rotation_z,
-            &rotation_yx))
-    {
-        return false;
-    }
-
-    if (!matrix4_multiply(
-            &rotated_scaled,
-            &rotation_zyx,
-            &scale))
-    {
-        return false;
-    }
-
-    if (!matrix4_multiply(
-            &transform,
-            &translation,
-            &rotated_scaled))
-    {
-        return false;
-    }
-
-    matrix4_t camera_transform;
-
-    if (!matrix4_multiply(
-            &camera_transform,
-            view_matrix,
-            &transform))
-    {
-        return false;
-    }
-
-    /*
-     * Transform each model vertex once.
+     * world_matrix already includes the local transformations
+     * of this instance and all its ancestors.
      */
     geometry3d_vertex_t transformed_vertices[
         RENDERER3D_MAX_VERTICES];
 
-    for (size_t i = 0U; i < model->vertex_count; ++i)
+    if (!renderer3d_transform_instance_vertices(
+            instance,
+            world_matrix,
+            view_matrix,
+            transformed_vertices))
     {
-        if (!geometry3d_transform_vertex(
-                &camera_transform,
-                &model->vertices[i],
-                &transformed_vertices[i]))
-        {
-            return false;
-        }
+        return false;
     }
 
     /*
@@ -723,9 +581,6 @@ bool renderer3d_draw_instance(
         const int16_t screen_x1 = (int16_t)lroundf(x1);
         const int16_t screen_y1 = (int16_t)lroundf(y1);
 
-        float clipped_t0;
-        float clipped_t1;
-
         float clipped_inverse_depth0;
         float clipped_inverse_depth1;
 
@@ -743,7 +598,7 @@ bool renderer3d_draw_instance(
         }
         else
         {
-            clipped_t0 = renderer3d_screen_line_parameter(
+            float clipped_t0 = renderer3d_screen_line_parameter(
                 (float)screen_x0,
                 (float)screen_y0,
                 projected_x0,
@@ -751,7 +606,7 @@ bool renderer3d_draw_instance(
                 projected_x1,
                 projected_y1);
 
-            clipped_t1 = renderer3d_screen_line_parameter(
+            float clipped_t1 = renderer3d_screen_line_parameter(
                 (float)screen_x1,
                 (float)screen_y1,
                 projected_x0,

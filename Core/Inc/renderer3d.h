@@ -14,26 +14,18 @@
  */
 #define RENDERER3D_MAX_VERTICES 64U
 
-/*
- * Draw one object instance onto an existing canvas.
- *
- * Does not clear the canvas or flush it to hardware.
- */
+bool renderer3d_rasterize_instance(
+    depth_buffer_t *depth_buffer,
+    const geometry3d_instance_t *instance,
+    const matrix4_t *world_matrix,
+    const matrix4_t *view_matrix,
+    const projection_perspective_t *projection);
+
 bool renderer3d_draw_instance(
     display_t *canvas,
     const depth_buffer_t *depth_buffer,
     const geometry3d_instance_t *instance,
-    const matrix4_t *view_matrix,
-    const projection_perspective_t *projection);
-
-/*
- * Rasterize all triangles of an instance into the depth buffer.
- *
- * Does not modify the display framebuffer.
- */
-bool renderer3d_rasterize_instance(
-    depth_buffer_t *depth_buffer,
-    const geometry3d_instance_t *instance,
+    const matrix4_t *world_matrix,
     const matrix4_t *view_matrix,
     const projection_perspective_t *projection);
 

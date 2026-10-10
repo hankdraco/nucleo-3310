@@ -74,4 +74,14 @@ bool geometry3d_transform_vertex(
     const geometry3d_vertex_t *vertex,
     geometry3d_vertex_t *result);
 
+/*
+ * Build a local-to-parent transformation matrix from a transform.
+ *
+ * Matrix order:
+ * T * Rz * Rx * Ry * S
+ */
+bool geometry3d_build_transform_matrix(
+    const geometry3d_transform_t *transform,
+    matrix4_t *result);
+
 #endif /* GEOMETRY3D_H */

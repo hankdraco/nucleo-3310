@@ -13,6 +13,11 @@ void scene3d_init(scene3d_t *scene)
     }
 
     scene->instance_count = 0U;
+
+    for (size_t i = 0U; i < SCENE3D_MAX_INSTANCES; ++i)
+    {
+        scene->parent_indices[i] = SCENE3D_NO_PARENT_INDEX;
+    }
 }
 
 bool scene3d_add_instance(
@@ -35,11 +40,11 @@ bool scene3d_add_instance(
         return false;
     }
 
-    /*
-     * Store a copy of the instance.
-     * The model geometry itself remains shared.
-     */
-    scene->instances[scene->instance_count] = *instance;
+    const size_t new_index = scene->instance_count;
+
+    scene->instances[new_index] = *instance;
+    scene->parent_indices[new_index] = SCENE3D_NO_PARENT_INDEX;
+
     ++scene->instance_count;
 
     return true;
@@ -103,20 +108,27 @@ bool scene3d_render(
         return false;
     }
 
-    /*
-     * Start a new frame: discard depth samples from the previous one.
-     */
     depth_buffer_clear(depth_buffer);
 
     /*
-     * PASS 1:
-     * Rasterize every instance's triangles before drawing any edges.
+     * PASS 1: rasterize every instance using its world transform.
      */
     for (size_t i = 0U; i < scene->instance_count; ++i)
     {
+        matrix4_t world_matrix;
+
+        if (!scene3d_build_world_transform(
+                scene,
+                i,
+                &world_matrix))
+        {
+            return false;
+        }
+
         if (!renderer3d_rasterize_instance(
                 depth_buffer,
                 &scene->instances[i],
+                &world_matrix,
                 view_matrix,
                 projection))
         {
@@ -125,16 +137,25 @@ bool scene3d_render(
     }
 
     /*
-     * PASS 2:
-     * Preserve the existing wireframe rendering for now.
-     * The depth buffer is populated but not yet used to hide edges.
+     * PASS 2: draw all edges using the same transform hierarchy.
      */
     for (size_t i = 0U; i < scene->instance_count; ++i)
     {
+        matrix4_t world_matrix;
+
+        if (!scene3d_build_world_transform(
+                scene,
+                i,
+                &world_matrix))
+        {
+            return false;
+        }
+
         if (!renderer3d_draw_instance(
                 canvas,
                 depth_buffer,
                 &scene->instances[i],
+                &world_matrix,
                 view_matrix,
                 projection))
         {
@@ -142,5 +163,144 @@ bool scene3d_render(
         }
     }
 
+    return true;
+}
+
+bool scene3d_set_parent(
+    scene3d_t *scene,
+    size_t child_index,
+    size_t parent_index)
+{
+    if (scene == NULL ||
+        scene->instance_count > SCENE3D_MAX_INSTANCES ||
+        child_index >= scene->instance_count ||
+        parent_index >= scene->instance_count ||
+        child_index == parent_index)
+    {
+        return false;
+    }
+
+    /*
+     * Walk up the prospective parent's ancestry.
+     * If we encounter the child, the new relationship would
+     * create a cycle.
+     */
+    size_t current = parent_index;
+    size_t steps = 0U;
+
+    while (current != SCENE3D_NO_PARENT_INDEX)
+    {
+        if (current >= scene->instance_count ||
+            current == child_index)
+        {
+            return false;
+        }
+
+        current = scene->parent_indices[current];
+
+        ++steps;
+
+        /*
+         * Also detect a pre-existing malformed cycle.
+         */
+        if (steps > scene->instance_count)
+        {
+            return false;
+        }
+    }
+
+    scene->parent_indices[child_index] = parent_index;
+
+    return true;
+}
+
+bool scene3d_clear_parent(
+    scene3d_t *scene,
+    size_t child_index)
+{
+    if (scene == NULL ||
+        scene->instance_count > SCENE3D_MAX_INSTANCES ||
+        child_index >= scene->instance_count)
+    {
+        return false;
+    }
+
+    scene->parent_indices[child_index] = SCENE3D_NO_PARENT_INDEX;
+
+    return true;
+}
+
+bool scene3d_build_world_transform(
+    const scene3d_t *scene,
+    size_t instance_index,
+    matrix4_t *world_matrix)
+{
+    if (scene == NULL ||
+        world_matrix == NULL ||
+        scene->instance_count > SCENE3D_MAX_INSTANCES ||
+        instance_index >= scene->instance_count)
+    {
+        return false;
+    }
+
+    /*
+     * Collect the ancestry from the instance towards the root.
+     * This fixed-size array avoids dynamic allocation and recursion.
+     */
+    size_t chain[SCENE3D_MAX_INSTANCES];
+    size_t chain_count = 0U;
+    size_t current = instance_index;
+
+    while (current != SCENE3D_NO_PARENT_INDEX)
+    {
+        if (current >= scene->instance_count ||
+            chain_count >= scene->instance_count)
+        {
+            /* Invalid parent index or hierarchy cycle. */
+            return false;
+        }
+
+        chain[chain_count++] = current;
+        current = scene->parent_indices[current];
+    }
+
+    matrix4_t accumulated;
+    matrix4_set_identity(&accumulated);
+
+    /*
+     * The collected chain is child-to-root.
+     * Apply transforms in reverse order: root-to-child.
+     */
+    while (chain_count > 0U)
+    {
+        const size_t index = chain[--chain_count];
+
+        matrix4_t local_matrix;
+        matrix4_t combined;
+
+        if (!geometry3d_build_transform_matrix(
+                &scene->instances[index].transform,
+                &local_matrix))
+        {
+            return false;
+        }
+
+        /*
+         * Column-vector convention:
+         *
+         * M_world(child) = M_world(parent) * M_local(child)
+         */
+        if (!matrix4_multiply(
+                &combined,
+                &accumulated,
+                &local_matrix))
+        {
+            return false;
+        }
+
+        accumulated = combined;
+    }
+
+    *world_matrix = accumulated;
     return true;
 }
