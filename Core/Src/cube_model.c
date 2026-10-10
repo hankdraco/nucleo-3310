@@ -1,4 +1,3 @@
-
 #include "cube_model.h"
 
 static const geometry3d_vertex_t cube_vertices[] =
