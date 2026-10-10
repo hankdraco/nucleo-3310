@@ -1,4 +1,3 @@
-
 #ifndef GEOMETRY3D_H
 #define GEOMETRY3D_H
 

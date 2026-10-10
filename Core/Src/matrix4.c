@@ -1,4 +1,3 @@
-
 #include "matrix4.h"
 
 #include <stddef.h>

@@ -1,4 +1,3 @@
-
 #ifndef PROJECTION_H
 #define PROJECTION_H
 
@@ -17,7 +16,6 @@ typedef struct
 typedef struct
 {
     float focal_length;
-    float camera_distance;
     float near_plane;
     float center_x;
     float center_y;
@@ -41,4 +39,4 @@ bool projection_perspective_project_float(
     float *screen_x,
     float *screen_y);
 
-#endif
+#endif /* PROJECTION_H */

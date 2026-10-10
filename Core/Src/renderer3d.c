@@ -1,4 +1,3 @@
-
 #include "renderer3d.h"
 
 #include <float.h>
@@ -18,19 +17,14 @@ static bool renderer3d_clip_segment_to_near_plane(
         start == NULL ||
         end == NULL ||
         visible == NULL ||
-        !isfinite(projection->camera_distance) ||
         !isfinite(projection->near_plane) ||
-        projection->camera_distance <= 0.0f ||
         projection->near_plane <= 0.0f)
     {
         return false;
     }
 
-    const float start_depth =
-        projection->camera_distance + start->z;
-
-    const float end_depth =
-        projection->camera_distance + end->z;
+    const float start_depth = start->z;
+    const float end_depth = end->z;
 
     if (!isfinite(start_depth) || !isfinite(end_depth))
     {
@@ -79,10 +73,7 @@ static bool renderer3d_clip_segment_to_near_plane(
          * Place the intersection just inside the visible
          * half-space to avoid floating-point boundary errors.
          */
-        .z = projection->near_plane -
-             projection->camera_distance +
-             4.0f * FLT_EPSILON *
-             fmaxf(1.0f, fabsf(projection->camera_distance))
+        .z = projection->near_plane
     };
 
     if (!start_inside)
@@ -204,23 +195,23 @@ static bool renderer3d_clip_line_to_canvas(
 bool renderer3d_draw_instance(
     display_t *canvas,
     const geometry3d_instance_t *instance,
+    const matrix4_t *view_matrix,
     const projection_perspective_t *projection)
 {
     if (canvas == NULL ||
         instance == NULL ||
         instance->model == NULL ||
+        view_matrix == NULL ||
         projection == NULL)
     {
         return false;
     }
 
     if (!isfinite(projection->focal_length) ||
-        !isfinite(projection->camera_distance) ||
         !isfinite(projection->near_plane) ||
         !isfinite(projection->center_x) ||
         !isfinite(projection->center_y) ||
         projection->focal_length <= 0.0f ||
-        projection->camera_distance <= 0.0f ||
         projection->near_plane <= 0.0f)
     {
         return false;
@@ -307,6 +298,16 @@ bool renderer3d_draw_instance(
         return false;
     }
 
+    matrix4_t camera_transform;
+
+    if (!matrix4_multiply(
+            &camera_transform,
+            view_matrix,
+            &transform))
+    {
+        return false;
+    }
+
     /*
      * Transform each model vertex once.
      */
@@ -316,7 +317,7 @@ bool renderer3d_draw_instance(
     for (size_t i = 0U; i < model->vertex_count; ++i)
     {
         if (!geometry3d_transform_vertex(
-                &transform,
+                &camera_transform,
                 &model->vertices[i],
                 &transformed_vertices[i]))
         {

@@ -56,6 +56,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/cube_model.c
     Core/Src/renderer3d.c
     Core/Src/scene3d.c
+    Core/Src/camera3d.c
 )
 
 # Add include paths

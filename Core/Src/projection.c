@@ -29,49 +29,33 @@ bool projection_orthographic_project(
     return true;
 }
 
-
 bool projection_perspective_project(
     const projection_perspective_t *projection,
     const geometry3d_vertex_t *vertex,
     int16_t *screen_x,
     int16_t *screen_y)
 {
-    if (projection == 0 ||
-        vertex == 0 ||
-        screen_x == 0 ||
-        screen_y == 0)
+    if (screen_x == NULL || screen_y == NULL)
     {
         return false;
     }
 
-    if (projection->focal_length <= 0.0f ||
-        projection->camera_distance <= 0.0f)
+    float x;
+    float y;
+
+    if (!projection_perspective_project_float(
+            projection, vertex, &x, &y))
     {
         return false;
     }
 
-    /*
-     * Camera is at (0, 0, -camera_distance)
-     * and looks toward positive Z.
-     */
-    const float camera_depth =
-        projection->camera_distance + vertex->z;
-
-    /*
-     * Points at or behind the camera cannot be projected.
-     */
-    if (camera_depth <= 0.0f)
+    if (x < (float)INT16_MIN ||
+        x > (float)INT16_MAX ||
+        y < (float)INT16_MIN ||
+        y > (float)INT16_MAX)
     {
         return false;
     }
-
-    const float x =
-        projection->center_x +
-        projection->focal_length * vertex->x / camera_depth;
-
-    const float y =
-        projection->center_y -
-        projection->focal_length * vertex->y / camera_depth;
 
     *screen_x = (int16_t)lroundf(x);
     *screen_y = (int16_t)lroundf(y);
@@ -94,7 +78,6 @@ bool projection_perspective_project_float(
     }
 
     if (!isfinite(projection->focal_length) ||
-        !isfinite(projection->camera_distance) ||
         !isfinite(projection->near_plane) ||
         !isfinite(projection->center_x) ||
         !isfinite(projection->center_y) ||
@@ -102,21 +85,16 @@ bool projection_perspective_project_float(
         !isfinite(vertex->y) ||
         !isfinite(vertex->z) ||
         projection->focal_length <= 0.0f ||
-        projection->camera_distance <= 0.0f ||
         projection->near_plane <= 0.0f)
     {
         return false;
     }
 
-    float depth = projection->camera_distance + vertex->z;
+    float depth = vertex->z;
 
     const float tolerance =
         8.0f * FLT_EPSILON *
-        fmaxf(
-            1.0f,
-            fmaxf(
-                fabsf(projection->camera_distance),
-                fabsf(vertex->z)));
+        fmaxf(1.0f, fabsf(vertex->z));
 
     if (!isfinite(depth) ||
         depth < projection->near_plane - tolerance)

@@ -59,10 +59,12 @@ geometry3d_instance_t *scene3d_get_instance(
 bool scene3d_render(
     const scene3d_t *scene,
     display_t *canvas,
+    const matrix4_t *view_matrix,
     const projection_perspective_t *projection)
 {
     if (scene == NULL ||
         canvas == NULL ||
+        view_matrix == NULL ||
         projection == NULL ||
         scene->instance_count > SCENE3D_MAX_INSTANCES)
     {
@@ -74,6 +76,7 @@ bool scene3d_render(
         if (!renderer3d_draw_instance(
                 canvas,
                 &scene->instances[i],
+                view_matrix,
                 projection))
         {
             return false;

@@ -29,6 +29,7 @@ geometry3d_instance_t *scene3d_get_instance(
 bool scene3d_render(
     const scene3d_t *scene,
     display_t *canvas,
+    const matrix4_t *view_matrix,
     const projection_perspective_t *projection);
 
 #endif /* SCENE3D_H */

@@ -1,4 +1,3 @@
-
 #include "app.h"
 
 #include <math.h>
@@ -46,7 +45,6 @@ static display_t display;
 static const projection_perspective_t cube_projection =
 {
     .focal_length = 48.0f,
-    .camera_distance = 5.0f,
     .near_plane = 0.1f,
     .center_x = (float)(DISPLAY_WIDTH / 2U),
     .center_y = (float)(DISPLAY_HEIGHT / 2U)
@@ -71,9 +69,19 @@ static bool app_render_and_flush(const app_t *app)
 {
     display_clear(&display);
 
+    matrix4_t view_matrix;
+
+    if (!camera3d_build_view_matrix(
+            &app->camera,
+            &view_matrix))
+    {
+        return false;
+    }
+
     if (!scene3d_render(
             &app->scene,
             &display,
+            &view_matrix,
             &cube_projection))
     {
         return false;
@@ -88,6 +96,17 @@ bool app_init(app_t *app)
     {
         return false;
     }
+
+    if (!camera3d_init(&app->camera))
+    {
+        return false;
+    }
+
+    /*
+    * Preserve the original camera position:
+    * (0, 0, -5), looking along positive Z.
+    */
+    app->camera.position.z = -5.0f;
 
     app->render_accumulator_seconds = 0.0f;
 
