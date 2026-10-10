@@ -1,7 +1,9 @@
 #include <stddef.h>
+#include <math.h>
 
 #include "scene3d.h"
 #include "renderer3d.h"
+#include "modifier3d.h"
 
 void scene3d_init(scene3d_t *scene)
 {
@@ -53,6 +55,35 @@ geometry3d_instance_t *scene3d_get_instance(
     }
 
     return &scene->instances[index];
+}
+
+bool scene3d_update(
+    scene3d_t *scene,
+    float dt_seconds)
+{
+    if (scene == NULL ||
+        !isfinite(dt_seconds) ||
+        dt_seconds < 0.0f ||
+        scene->instance_count > SCENE3D_MAX_INSTANCES)
+    {
+        return false;
+    }
+
+    /*
+     * Every instance owns its modifiers.
+     * Modifiers incrementally update the instance's current transform.
+     */
+    for (size_t i = 0U; i < scene->instance_count; ++i)
+    {
+        if (!modifier3d_update_instance(
+                &scene->instances[i],
+                dt_seconds))
+        {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool scene3d_render(

@@ -34,4 +34,8 @@ bool scene3d_render(
     const matrix4_t *view_matrix,
     const projection_perspective_t *projection);
 
+bool scene3d_update(
+    scene3d_t *scene,
+    float dt_seconds);
+
 #endif /* SCENE3D_H */

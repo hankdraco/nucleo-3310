@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "matrix4.h"
+#include "modifier3d_types.h"
 
 typedef struct
 {
@@ -61,6 +62,8 @@ typedef struct
 {
     const geometry3d_model_t *model;
     geometry3d_transform_t transform;
+
+    modifier3d_list_t modifiers;
 } geometry3d_instance_t;
 
 bool geometry3d_model_is_valid(

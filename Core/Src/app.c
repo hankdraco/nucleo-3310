@@ -1,9 +1,8 @@
-#include "app.h"
-
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 
+#include "app.h"
 #include "display.h"
 #include "display_pcd8544.h"
 #include "pcd8544.h"
@@ -16,9 +15,10 @@
 #include "renderer3d.h"
 #include "scene3d.h"
 #include "depth_buffer.h"
+#include "modifier3d.h"
 
 #define APP_RENDER_INTERVAL_SECONDS       (1.0f / 30.0f)
-#define APP_TWO_PI_RAD                    6.28318530718f
+#define APP_PI_RAD                        (3.14159265358979323846f)
 
 #define APP_CUBE_INITIAL_ANGLE_X_RAD      0.55f
 #define APP_CUBE_INITIAL_ANGLE_Y_RAD      0.65f
@@ -53,19 +53,111 @@ static const projection_perspective_t cube_projection =
     .center_y = (float)(DISPLAY_HEIGHT / 2U)
 };
 
-static void app_update_angle(
-    float *angle_rad,
-    float angular_velocity_rad_s,
-    float dt_seconds)
+static bool app_add_rotation_modifiers(
+    app_t *app,
+    size_t instance_index,
+    float speed_x,
+    float speed_y,
+    float speed_z)
 {
-    *angle_rad += angular_velocity_rad_s * dt_seconds;
-
-    *angle_rad = fmodf(*angle_rad, APP_TWO_PI_RAD);
-
-    if (*angle_rad < 0.0f)
+    if (app == NULL)
     {
-        *angle_rad += APP_TWO_PI_RAD;
+        return false;
     }
+
+    geometry3d_instance_t *instance =
+        scene3d_get_instance(&app->scene, instance_index);
+
+    if (instance == NULL)
+    {
+        return false;
+    }
+
+    const modifier3d_config_t rotation_x =
+    {
+        .target = MODIFIER3D_TARGET_ROTATION_X,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -APP_PI_RAD,
+        .max_value = APP_PI_RAD,
+        .speed = speed_x
+    };
+
+    const modifier3d_config_t rotation_y =
+    {
+        .target = MODIFIER3D_TARGET_ROTATION_Y,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -APP_PI_RAD,
+        .max_value = APP_PI_RAD,
+        .speed = speed_y
+    };
+
+    const modifier3d_config_t rotation_z =
+    {
+        .target = MODIFIER3D_TARGET_ROTATION_Z,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -APP_PI_RAD,
+        .max_value = APP_PI_RAD,
+        .speed = speed_z
+    };
+
+    return modifier3d_add(instance, &rotation_x) &&
+           modifier3d_add(instance, &rotation_y) &&
+           modifier3d_add(instance, &rotation_z);
+}
+
+static bool app_add_pulsating_scale_modifiers(
+    app_t *app,
+    size_t instance_index)
+{
+    if (app == NULL)
+    {
+        return false;
+    }
+
+    geometry3d_instance_t *instance =
+        scene3d_get_instance(&app->scene, instance_index);
+
+    if (instance == NULL)
+    {
+        return false;
+    }
+
+    /*
+     * The near cube starts at scale (0.6, 2.6, 0.6).
+     *
+     * All axes use the same normalized range and phase, so the
+     * cube preserves its proportions while pulsating.
+     */
+    const modifier3d_config_t scale_x =
+    {
+        .target = MODIFIER3D_TARGET_SCALE_X,
+        .behavior = MODIFIER3D_BEHAVIOR_ABS_SIN,
+        .min_value = 0.4f,
+        .max_value = 0.8f,
+        .speed = 1.8f
+    };
+
+    const modifier3d_config_t scale_y =
+    {
+        .target = MODIFIER3D_TARGET_SCALE_Y,
+        .behavior = MODIFIER3D_BEHAVIOR_ABS_SIN,
+        .min_value = 1.7333333f,
+        .max_value = 3.4666667f,
+        .speed = 1.8f
+    };
+
+    const modifier3d_config_t scale_z =
+    {
+        .target = MODIFIER3D_TARGET_SCALE_Z,
+        .behavior = MODIFIER3D_BEHAVIOR_ABS_SIN,
+        .min_value = 0.4f,
+        .max_value = 0.8f,
+        .speed = 1.8f
+    };
+
+    return modifier3d_add(instance, &scale_x) &&
+           modifier3d_add(instance, &scale_y) &&
+           modifier3d_add(instance, &scale_z);
 }
 
 static bool app_render_and_flush(const app_t *app)
@@ -127,13 +219,6 @@ bool app_init(app_t *app)
 
     scene3d_init(&app->scene);
 
-    for (size_t i = 0U; i < SCENE3D_MAX_INSTANCES; ++i)
-    {
-        app->animations[i].angular_velocity_x_rad_s = 0.0f;
-        app->animations[i].angular_velocity_y_rad_s = 0.0f;
-        app->animations[i].angular_velocity_z_rad_s = 0.0f;
-    }
-
     // instances definitions
     const geometry3d_instance_t near_cube =
     {
@@ -170,15 +255,30 @@ bool app_init(app_t *app)
         return false;
     }
 
-    /* Animation velocities for the near cube. */
-    app->animations[APP_NEAR_CUBE_INDEX].angular_velocity_x_rad_s = 0.55f;
-    app->animations[APP_NEAR_CUBE_INDEX].angular_velocity_y_rad_s = 0.85f;
-    app->animations[APP_NEAR_CUBE_INDEX].angular_velocity_z_rad_s = 0.15f;
+    if (!app_add_rotation_modifiers(
+            app,
+            0U,
+            0.55f,
+            0.85f,
+            0.15f))
+    {
+        return false;
+    }
 
-    /* Animation velocities for the far cube. */
-    app->animations[APP_FAR_CUBE_INDEX].angular_velocity_x_rad_s = -0.35f;
-    app->animations[APP_FAR_CUBE_INDEX].angular_velocity_y_rad_s = 0.55f;
-    app->animations[APP_FAR_CUBE_INDEX].angular_velocity_z_rad_s = 0.65f;
+    if (!app_add_rotation_modifiers(
+            app,
+            1U,
+            -0.35f,
+            0.55f,
+            0.65f))
+    {
+        return false;
+    }
+
+    if (!app_add_pulsating_scale_modifiers(app, 0U))
+    {
+        return false;
+    }
 
     pcd8544_transport_stm32_init(&lcd_transport);
 
@@ -207,18 +307,9 @@ bool app_init(app_t *app)
 bool app_run(app_t *app, float dt_seconds)
 {
     if (app == NULL ||
+        !isfinite(dt_seconds) ||
         dt_seconds < 0.0f ||
         app->scene.instance_count > SCENE3D_MAX_INSTANCES)
-    {
-        return false;
-    }
-
-    geometry3d_instance_t *cube =
-        scene3d_get_instance(
-            &app->scene,
-            APP_CUBE_INSTANCE_INDEX);
-
-    if (cube == NULL)
     {
         return false;
     }
@@ -226,38 +317,19 @@ bool app_run(app_t *app, float dt_seconds)
     if (dt_seconds > 0.0f)
     {
         /*
-         * Update the animation independently of rendering.
+         * Update instance state independently of rendering.
          */
-        for (size_t i = 0U; i < app->scene.instance_count; ++i)
+        if (!scene3d_update(&app->scene, dt_seconds))
         {
-            geometry3d_instance_t *instance =
-                scene3d_get_instance(&app->scene, i);
-
-            if (instance == NULL)
-            {
-                return false;
-            }
-
-            const app_instance_animation_t *animation =
-                &app->animations[i];
-
-            app_update_angle(
-                &instance->transform.rotation_rad.x,
-                animation->angular_velocity_x_rad_s,
-                dt_seconds);
-
-            app_update_angle(
-                &instance->transform.rotation_rad.y,
-                animation->angular_velocity_y_rad_s,
-                dt_seconds);
-
-            app_update_angle(
-                &instance->transform.rotation_rad.z,
-                animation->angular_velocity_z_rad_s,
-                dt_seconds);
+            return false;
         }
 
         app->render_accumulator_seconds += dt_seconds;
+
+        if (!isfinite(app->render_accumulator_seconds))
+        {
+            return false;
+        }
     }
 
     /*
@@ -270,8 +342,8 @@ bool app_run(app_t *app, float dt_seconds)
     }
 
     /*
-     * Discard missed frame intervals while preserving the remainder.
-     * Render only the latest animation state.
+     * Preserve the accumulator remainder while rendering only
+     * the latest scene state.
      */
     app->render_accumulator_seconds -=
         floorf(
