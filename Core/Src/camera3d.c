@@ -227,11 +227,11 @@ bool camera3d_build_view_matrix(
     /*
      * Camera orientation:
      *
-     *     R = Rz * Rx * Ry
+     *     R = Ry * Rx * Rz
      *
      * Inverse orientation:
      *
-     *     R^-1 = Ry^-1 * Rx^-1 * Rz^-1
+     *     R^-1 = Rz^-1 * Rx^-1 * Ry^-1
      *
      * View:
      *
@@ -239,7 +239,7 @@ bool camera3d_build_view_matrix(
      */
     if (!matrix4_multiply(
             &intermediate_1,
-            &rotation_z_inverse,
+            &rotation_y_inverse,
             &translation))
     {
         return false;
@@ -255,7 +255,7 @@ bool camera3d_build_view_matrix(
 
     if (!matrix4_multiply(
             &result,
-            &rotation_y_inverse,
+            &rotation_z_inverse,
             &intermediate_2))
     {
         return false;

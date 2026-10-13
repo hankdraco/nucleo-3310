@@ -6,7 +6,7 @@
 #include "camera3d.h"
 #include "input_types.h"
 
-#define CAMERA_CONTROLLER_DEFAULT_MOVE_SPEED 5.0f
+#define CAMERA_CONTROLLER_DEFAULT_MOVE_SPEED 8.0f
 #define CAMERA_CONTROLLER_DEFAULT_MOUSE_SENSITIVITY 0.005f
 
 /* 89 degrees, leaving a margin from +/-90 degrees. */

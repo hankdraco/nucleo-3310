@@ -5,6 +5,56 @@
 
 #define CAMERA3D_TEST_TOLERANCE 0.0001f
 
+static bool camera3d_test_transform_point(
+    const matrix4_t *matrix,
+    const geometry3d_vector3_t *point,
+    geometry3d_vector3_t *result)
+{
+    if (matrix == NULL || point == NULL || result == NULL)
+    {
+        return false;
+    }
+
+    const float x =
+        matrix->m[0][0] * point->x +
+        matrix->m[0][1] * point->y +
+        matrix->m[0][2] * point->z +
+        matrix->m[0][3];
+
+    const float y =
+        matrix->m[1][0] * point->x +
+        matrix->m[1][1] * point->y +
+        matrix->m[1][2] * point->z +
+        matrix->m[1][3];
+
+    const float z =
+        matrix->m[2][0] * point->x +
+        matrix->m[2][1] * point->y +
+        matrix->m[2][2] * point->z +
+        matrix->m[2][3];
+
+    const float w =
+        matrix->m[3][0] * point->x +
+        matrix->m[3][1] * point->y +
+        matrix->m[3][2] * point->z +
+        matrix->m[3][3];
+
+    if (!isfinite(x) || !isfinite(y) ||
+        !isfinite(z) || !isfinite(w) ||
+        fabsf(w) < 1.0e-6f)
+    {
+        return false;
+    }
+
+    result->x = x / w;
+    result->y = y / w;
+    result->z = z / w;
+
+    return isfinite(result->x) &&
+           isfinite(result->y) &&
+           isfinite(result->z);
+}
+
 static bool test_camera3d_clear_target_preserves_orientation(void)
 {
     camera3d_t camera;
@@ -134,6 +184,72 @@ static bool test_camera3d_clear_target_failure_preserves_state(void)
     return true;
 }
 
+static bool test_camera3d_look_at_points_towards_target(void)
+{
+    camera3d_t camera;
+
+    if (!camera3d_init(&camera))
+        return false;
+
+    camera.position.x = 8.0f;
+    camera.position.y = 2.0f;
+    camera.position.z = -6.0f;
+
+    const geometry3d_vector3_t target =
+    {
+        .x = 0.0f,
+        .y = 2.4f,
+        .z = 0.0f
+    };
+
+    if (!camera3d_set_target(&camera, &target))
+        return false;
+
+    matrix4_t view_matrix;
+
+    if (!camera3d_build_view_matrix(&camera, &view_matrix))
+        return false;
+
+    geometry3d_vector3_t target_in_camera_space;
+
+    if (!camera3d_test_transform_point(
+            &view_matrix,
+            &target,
+            &target_in_camera_space))
+    {
+        return false;
+    }
+
+    /*
+     * A point directly in front of the camera
+     * must have X ~= 0, Y ~= 0 and positive Z.
+     */
+    if (fabsf(target_in_camera_space.x) > 1.0e-3f)
+        return false;
+
+    if (fabsf(target_in_camera_space.y) > 1.0e-3f)
+        return false;
+
+    const float dx = target.x - camera.position.x;
+    const float dy = target.y - camera.position.y;
+    const float dz = target.z - camera.position.z;
+
+    const float expected_distance =
+        sqrtf(dx * dx + dy * dy + dz * dz);
+
+    if (!isfinite(expected_distance))
+        return false;
+
+    if (fabsf(
+            target_in_camera_space.z - expected_distance) >
+        1.0e-3f)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 bool test_camera3d_suite(void)
 {
     if (!test_camera3d_clear_target_preserves_orientation())
@@ -143,6 +259,9 @@ bool test_camera3d_suite(void)
         return false;
 
     if (!test_camera3d_clear_target_failure_preserves_state())
+        return false;
+
+    if (!test_camera3d_look_at_points_towards_target())
         return false;
 
     return true;

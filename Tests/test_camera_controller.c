@@ -152,7 +152,7 @@ static bool test_camera_controller_forward_movement(void)
         return false;
     }
 
-    if (fabsf(camera.position.z - 2.5f) >
+    if (fabsf(camera.position.z - 4.0f) >
         CAMERA_CONTROLLER_TEST_TOLERANCE)
     {
         return false;
