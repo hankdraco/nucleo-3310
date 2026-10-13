@@ -70,6 +70,18 @@ bool app_init(app_t *app)
     }
 
     /*
+    * Initialize camera control from the initial scene view.
+    * The controller preserves the current orientation
+    * and switches the camera to manual orientation mode.
+    */
+    if (!camera_controller_init(
+            &app->camera_controller,
+            &app->camera))
+    {
+        return false;
+    }
+
+    /*
      * Hardware initialization remains the application's responsibility.
      */
     pcd8544_transport_stm32_init(&lcd_transport);
@@ -96,9 +108,13 @@ bool app_init(app_t *app)
     return true;
 }
 
-bool app_run(app_t *app, float dt_seconds)
+bool app_run(
+    app_t *app,
+    float dt_seconds,
+    const input_snapshot_t *input)
 {
     if (app == NULL ||
+        input == NULL ||
         !isfinite(dt_seconds) ||
         dt_seconds < 0.0f ||
         app->scene.instance_count > SCENE3D_MAX_INSTANCES)
@@ -106,11 +122,21 @@ bool app_run(app_t *app, float dt_seconds)
         return false;
     }
 
+    /*
+     * Process input on every application update,
+     * independently of rendering frequency.
+     */
+    if (!camera_controller_update(
+            &app->camera_controller,
+            &app->camera,
+            input,
+            dt_seconds))
+    {
+        return false;
+    }
+
     if (dt_seconds > 0.0f)
     {
-        /*
-         * Update scene state independently of rendering frequency.
-         */
         if (!scene3d_update(&app->scene, dt_seconds))
         {
             return false;
@@ -124,18 +150,12 @@ bool app_run(app_t *app, float dt_seconds)
         }
     }
 
-    /*
-     * No frame is due yet.
-     */
     if (app->render_accumulator_seconds <
         APP_RENDER_INTERVAL_SECONDS)
     {
         return true;
     }
 
-    /*
-     * Preserve the remainder and render the latest scene state.
-     */
     app->render_accumulator_seconds -=
         floorf(
             app->render_accumulator_seconds /

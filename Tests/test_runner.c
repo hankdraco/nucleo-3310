@@ -4,6 +4,9 @@
 bool test_pcd8544_suite(void);
 bool test_display_suite(void);
 bool test_input_protocol_suite(void);
+bool test_input_state_suite(void);
+bool test_camera3d_suite(void);
+bool test_camera_controller_suite(void);
 
 int main(void)
 {
@@ -32,6 +35,30 @@ int main(void)
         return 1;
     }
     printf("INPUT PROTOCOL TESTS PASSED\n");
+
+
+    if (!test_input_state_suite())
+    {
+        printf("INPUT STATE TESTS FAILED\n");
+        return 1;
+    }
+    printf("INPUT STATE TESTS PASSED\n");
+
+
+    if (!test_camera3d_suite())
+    {
+        printf("CAMERA3D TESTS FAILED\n");
+        return 1;
+    }
+    printf("CAMERA3D TESTS PASSED\n");
+
+    
+    if (!test_camera_controller_suite())
+    {
+        printf("CAMERA CONTROLLER TESTS FAILED\n");
+        return 1;
+    }
+    printf("CAMERA CONTROLLER TESTS PASSED\n");
 
 
     printf("ALL TESTS PASSED\n");

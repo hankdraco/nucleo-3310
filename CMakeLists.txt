@@ -65,6 +65,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/input_state.c
     Core/Src/input_protocol.c
     Core/Src/transmission_controller.c
+    Core/Src/camera_controller.c
 )
 
 # Add include paths

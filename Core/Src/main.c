@@ -26,6 +26,7 @@
 /* USER CODE BEGIN Includes */
 #include "input_state.h"
 #include "transmission_controller.h"
+#include "input_state.h"
 
 #include "pcd8544.h"
 #include "pcd8544_transport.h"
@@ -143,7 +144,7 @@ int main(void)
         Error_Handler();
     }
 
-    
+
     uint32_t now_ms = HAL_GetTick();
 
     uint32_t elapsed_ms = now_ms - last_tick_ms;
@@ -152,7 +153,14 @@ int main(void)
 
     float dt_seconds = (float)elapsed_ms / 1000.0f;
 
-    app_run(&app, dt_seconds);
+    input_snapshot_t input;
+
+    input_state_consume(now_ms, &input);
+
+    if (!app_run(&app, dt_seconds, &input))
+    {
+        Error_Handler();
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

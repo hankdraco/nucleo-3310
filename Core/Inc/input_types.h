@@ -4,6 +4,19 @@
 #include <stdint.h>
 
 /*
+ * Semantic input key mask.
+ *
+ * These bits describe actions, not physical
+ * keyboard scan codes or ASCII characters.
+ */
+#define INPUT_KEY_FORWARD       UINT32_C(0x00000001)
+#define INPUT_KEY_BACKWARD      UINT32_C(0x00000002)
+#define INPUT_KEY_STRAFE_LEFT   UINT32_C(0x00000004)
+#define INPUT_KEY_STRAFE_RIGHT  UINT32_C(0x00000008)
+#define INPUT_KEY_MOVE_UP       UINT32_C(0x00000010)
+#define INPUT_KEY_MOVE_DOWN     UINT32_C(0x00000020)
+
+/*
  * Dane z jednej poprawnej ramki protokołu.
  *
  * mouse_dx / mouse_dy oznaczają przyrost ruchu

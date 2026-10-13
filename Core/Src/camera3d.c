@@ -125,6 +125,26 @@ bool camera3d_clear_target(camera3d_t *camera)
         return false;
     }
 
+    if (!camera->target_enabled)
+    {
+        return true;
+    }
+
+    /*
+     * Preserve the current look-at orientation
+     * before switching to manual orientation.
+     */
+    geometry3d_vector3_t rotation;
+
+    if (!camera3d_compute_look_at_rotation(
+            camera,
+            &camera->target,
+            &rotation))
+    {
+        return false;
+    }
+
+    camera->rotation_rad = rotation;
     camera->target_enabled = false;
 
     return true;

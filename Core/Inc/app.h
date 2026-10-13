@@ -6,6 +6,8 @@
 #include "camera3d.h"
 #include "projection.h"
 #include "scene3d.h"
+#include "camera_controller.h"
+#include "input_types.h"
 
 typedef struct
 {
@@ -13,11 +15,15 @@ typedef struct
 
     scene3d_t scene;
     camera3d_t camera;
+    camera_controller_t camera_controller;
     projection_perspective_t projection;
 } app_t;
 
 bool app_init(app_t *app);
 
-bool app_run(app_t *app, float dt_seconds);
+bool app_run(
+    app_t *app,
+    float dt_seconds,
+    const input_snapshot_t *input);
 
 #endif /* APP_H */
