@@ -24,6 +24,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "input_state.h"
+#include "transmission_controller.h"
+
 #include "pcd8544.h"
 #include "pcd8544_transport.h"
 
@@ -117,6 +120,13 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  input_state_init();
+
+  if (!transmission_controller_start())
+  {
+      Error_Handler();
+  }
+
   static app_t app;
 
   if (!app_init(&app))
@@ -128,6 +138,12 @@ int main(void)
 
   while (1)
   {
+    if (transmission_controller_has_fault())
+    {
+        Error_Handler();
+    }
+
+    
     uint32_t now_ms = HAL_GetTick();
 
     uint32_t elapsed_ms = now_ms - last_tick_ms;

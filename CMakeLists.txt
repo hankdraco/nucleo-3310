@@ -62,6 +62,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/modifier3d.c
     Core/Src/scene_loader.c
     Core/Src/city_models.c
+    Core/Src/input_state.c
+    Core/Src/input_protocol.c
+    Core/Src/transmission_controller.c
 )
 
 # Add include paths
