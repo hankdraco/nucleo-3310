@@ -1,16 +1,25 @@
 # Host Tests
 
-The `Tests` directory contains host-side tests for the portable parts of the project.
+The `Tests` directory contains native host-side tests for the portable parts of the project. The tests are built as a separate Windows executable and do not require the STM32 board, STM32 HAL, ST-Link, or LCD hardware.
 
-These tests are built as a separate native executable for Windows. They do not require the STM32 board, the STM32 HAL, or the LCD hardware.
+The host build currently covers:
+
+- the PCD8544 driver, using a fake transport;
+- the display abstraction;
+- the input-protocol parser;
+- the input-state logic;
+- camera orientation and view-matrix behavior;
+- camera-controller input and movement logic.
+
+These tests verify portable logic. They do not replace on-target verification of UART interrupts, BSP integration, timing, or synchronization between an ISR and the main loop.
 
 ## Requirements
 
 The tests require:
 
-* CMake
-* Ninja
-* GCC from W64DevKit
+- CMake
+- Ninja
+- GCC from W64DevKit
 
 Make sure `gcc` and `ninja` are available in `PATH`.
 
@@ -22,7 +31,7 @@ From the project root:
 cmake -S Tests -B Tests/build -G Ninja -DCMAKE_C_COMPILER=gcc
 ```
 
-This creates a separate CMake build directory under `Tests/build`.
+This creates a separate native CMake build directory under `Tests/build`.
 
 ## Build the tests
 
@@ -42,34 +51,46 @@ Tests/build/nucleo_3310_tests.exe
 .\Tests\build\nucleo_3310_tests.exe
 ```
 
-A successful run should look like:
+A successful run should look like this:
 
 ```text
 Tests
 =====
 PCD8544 TESTS PASSED
 DISPLAY TESTS PASSED
+INPUT PROTOCOL TESTS PASSED
+INPUT STATE TESTS PASSED
+CAMERA3D TESTS PASSED
+CAMERA CONTROLLER TESTS PASSED
 ALL TESTS PASSED
 ```
 
+The runner stops at the first failing test suite. Individual tests return `bool`; checks use the project's `CHECK(condition)` macro from `test_common.h`, which reports the source file, line number, and failed condition.
+
 ## Test architecture
 
-The tests exercise the portable parts of the project directly:
+`test_runner.c` is the only test executable entry point. It calls each suite in turn:
 
 ```text
-                 Tests/test_runner.c
-                         │
-             ┌───────────┴───────────┐
-             ▼                       ▼
-    test_pcd8544.c            test_display.c
-             │                       │
-             ▼                       ▼
-      Core/Src/pcd8544.c      Core/Src/display.c
-             │
-             ▼
-       fake transport
+Tests/test_runner.c
+  ├── test_pcd8544.c
+  │     └── Core/Src/pcd8544.c
+  │           └── fake transport
+  ├── test_display.c
+  │     └── Core/Src/display.c
+  │           └── PCD8544 interface / fake transport
+  ├── input_protocol_tests.c
+  │     └── Core/Src/input_protocol.c
+  ├── input_state_tests.c
+  │     └── Core/Src/input_state.c
+  ├── camera3d_tests.c
+  │     └── Core/Src/camera3d.c
+  │           └── geometry3d.c / matrix4.c
+  └── camera_controller_tests.c
+        └── Core/Src/camera_controller.c
+              └── camera3d.c / geometry3d.c / matrix4.c
 ```
 
-The STM32-specific transport implementation is intentionally not part of the host test build.
+The exact source list and dependencies are defined by `Tests/CMakeLists.txt`. Shared implementation files should only be added once to the host target.
 
-This allows the portable PCD8544 driver and display logic to be tested on the PC without requiring the STM32 board, STM32 HAL, or LCD hardware.
+The STM32-specific display transport and UART/BSP integration are intentionally excluded from the native test build. This allows portable code to be exercised on the PC without hardware dependencies. For the same reason, the host build's `input_state` tests check state semantics, timeout behavior, mouse-delta accumulation and consumption; they do not prove the correctness of target-side interrupt masking or ISR concurrency.
