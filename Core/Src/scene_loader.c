@@ -504,7 +504,7 @@ bool scene_loader_load(
     // camera->position.y = 52.0f;
     // camera->position.z = -54.0f;
     camera->position.x = 8.0f;
-    camera->position.y = 2.0f;
+    camera->position.y = 4.0f;
     camera->position.z = -6.0f;
 
     const geometry3d_vector3_t target =

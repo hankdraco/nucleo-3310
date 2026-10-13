@@ -11,6 +11,10 @@ typedef struct
 {
     float render_accumulator_seconds;
 
+    float camera_orbit_phase_rad;
+    float camera_orbit_radius;
+    float camera_orbit_height_offset;
+
     scene3d_t scene;
     camera3d_t camera;
     projection_perspective_t projection;
