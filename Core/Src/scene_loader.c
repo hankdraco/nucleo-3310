@@ -18,7 +18,7 @@
 
 #define SCENE_LOADER_ATTACHMENT_COUNT   6U
 
-#define SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND (1.5f)
+#define SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND (3.0f)
 
 static const geometry3d_vector3_t
     scene_loader_attachment_positions[
@@ -342,9 +342,9 @@ static bool scene_loader_add_car(
             },
             .scale =
             {
-                .x = 0.25f,
-                .y = 0.20f,
-                .z = 0.45f
+                .x = 1.25f,
+                .y = 1.00f,
+                .z = 2.25f
             }
         }
     };
