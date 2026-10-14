@@ -68,7 +68,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/camera_controller.c
     Core/Src/car_trajectory.c
     Core/Src/car_modifier.c
-    Core/Src/car_lifecycle.c
 )
 
 # Add include paths
