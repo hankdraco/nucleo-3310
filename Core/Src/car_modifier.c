@@ -4,6 +4,52 @@
 #include <stddef.h>
 
 #define CAR_MODIFIER_TOLERANCE (0.0001f)
+#define CAR_MODIFIER_PI_RAD (3.14159265358979323846f)
+static bool car_modifier_inside_city(const car_trajectory_pose_t *p,const car_modifier_environment_t *e)
+{
+ return p&&e&&isfinite(p->position.x)&&isfinite(p->position.z)&&
+ isfinite(e->city_half_extent_x)&&isfinite(e->city_half_extent_z)&&
+ e->city_half_extent_x>0.0f&&e->city_half_extent_z>0.0f&&
+ p->position.x>=-e->city_half_extent_x&&p->position.x<=e->city_half_extent_x&&
+ p->position.z>=-e->city_half_extent_z&&p->position.z<=e->city_half_extent_z;
+}
+static uint32_t car_modifier_random_next(uint32_t *s)
+{
+ uint32_t x=*s;if(x==0U)x=0x6D2B79F5U;
+ x^=x<<13U;x^=x>>17U;x^=x<<5U;*s=x;return x;
+}
+static float car_modifier_random_range(uint32_t *s,float lo,float hi)
+{
+ return lo+(hi-lo)*(float)(car_modifier_random_next(s)>>8U)/16777215.0f;
+}
+static bool car_modifier_spawn(car_modifier_context_t *c,uint32_t *committed)
+{
+ if(!c||!c->environment||!committed)return false;
+ car_modifier_environment_t *e=c->environment;
+ if(!isfinite(e->city_half_extent_x)||!isfinite(e->city_half_extent_z)||
+ !isfinite(e->street_half_width)||!isfinite(e->lane_edge_offset)||
+ !isfinite(e->minimum_speed_units_per_second)||!isfinite(e->maximum_speed_units_per_second)||
+ e->city_half_extent_x<=e->street_half_width||e->city_half_extent_z<=e->street_half_width||
+ e->street_half_width<=0.0f||e->lane_edge_offset<0.0f||
+ e->minimum_speed_units_per_second<=0.0f||
+ e->maximum_speed_units_per_second<e->minimum_speed_units_per_second)return false;
+ uint32_t rng=e->random_state,entry=car_modifier_random_next(&rng)%4U;
+ car_maneuver_t maneuver=(car_maneuver_t)(car_modifier_random_next(&rng)%3U);
+ float speed=car_modifier_random_range(&rng,e->minimum_speed_units_per_second,e->maximum_speed_units_per_second);
+ float lane=e->street_half_width-e->lane_edge_offset;
+ car_trajectory_pose_t pose={.position={.x=lane,.y=1.0f,.z=0.0f},.yaw_rad=0.0f};
+ switch(entry){
+ case 0U:pose.position.z=-e->city_half_extent_z;break;
+ case 1U:pose.position.x=-lane;pose.position.z=e->city_half_extent_z;pose.yaw_rad=CAR_MODIFIER_PI_RAD;break;
+ case 2U:pose.position.x=-e->city_half_extent_x;pose.position.z=-lane;pose.yaw_rad=CAR_MODIFIER_PI_RAD*0.5f;break;
+ default:pose.position.x=e->city_half_extent_x;pose.position.z=lane;pose.yaw_rad=-CAR_MODIFIER_PI_RAD*0.5f;break;
+ }
+ float distance=entry<2U?e->city_half_extent_z-e->street_half_width:e->city_half_extent_x-e->street_half_width;
+ float radius=2.0f*e->street_half_width-e->lane_edge_offset;
+ car_modifier_context_t result={0};
+ if(!car_modifier_route_init(&result,&pose,speed,distance,maneuver,maneuver==CAR_MANEUVER_STRAIGHT?0.0f:radius))return false;
+ result.environment=e;*c=result;*committed=rng;return true;
+}
 
 bool car_modifier_context_init_spawn(
     car_modifier_context_t *context,
@@ -101,6 +147,15 @@ bool car_modifier_update(
     car_modifier_context_t *car_context = context;
     car_modifier_context_t next_context = *car_context;
     float remaining_dt = dt_seconds;
+    bool spawned = false;
+    uint32_t next_random_state = 0U;
+    /* SPAWN is a one-shot transition, independent of elapsed time. */
+    if (next_context.state == CAR_MODIFIER_STATE_SPAWN)
+    {
+        if (!car_modifier_spawn(&next_context, &next_random_state)) return false;
+        spawned = true;
+        remaining_dt = 0.0f;
+    }
 
     /*
      * A single update can cross more than one state boundary:
@@ -109,17 +164,29 @@ bool car_modifier_update(
      */
     while (remaining_dt > 0.0f)
     {
-        if (next_context.state == CAR_MODIFIER_STATE_FREE ||
-            next_context.state == CAR_MODIFIER_STATE_DEPARTING)
+        if (next_context.state == CAR_MODIFIER_STATE_FREE)
         {
-            if (!car_trajectory_update(
-                    &next_context.trajectory,
-                    remaining_dt))
-            {
-                return false;
-            }
-
+            if (!car_trajectory_update(&next_context.trajectory, remaining_dt)) return false;
             remaining_dt = 0.0f;
+        }
+        else if (next_context.state == CAR_MODIFIER_STATE_DEPARTING)
+        {
+            if (next_context.environment &&
+                !car_modifier_inside_city(&next_context.trajectory.pose,next_context.environment))
+            {
+                next_context.state=CAR_MODIFIER_STATE_SPAWN;
+                if(!car_modifier_spawn(&next_context,&next_random_state))return false;
+                spawned=true;remaining_dt=0.0f;break;
+            }
+            if(!car_trajectory_update(&next_context.trajectory,remaining_dt))return false;
+            remaining_dt=0.0f;
+            if(next_context.environment &&
+                !car_modifier_inside_city(&next_context.trajectory.pose,next_context.environment))
+            {
+                next_context.state=CAR_MODIFIER_STATE_SPAWN;
+                if(!car_modifier_spawn(&next_context,&next_random_state))return false;
+                spawned=true;
+            }
         }
         else if (next_context.state == CAR_MODIFIER_STATE_APPROACH_TURN)
         {
@@ -227,6 +294,11 @@ bool car_modifier_update(
                 next_context.state = CAR_MODIFIER_STATE_DEPARTING;
             }
         }
+        else if (next_context.state == CAR_MODIFIER_STATE_SPAWN)
+        {
+            if (!car_modifier_spawn(&next_context,&next_random_state)) return false;
+            spawned=true;remaining_dt=0.0f;
+        }
         else
         {
             return false;
@@ -248,6 +320,7 @@ bool car_modifier_update(
     instance->transform.position.z = pose->position.z;
     instance->transform.rotation_rad.y = pose->yaw_rad;
 
+    if(spawned&&next_context.environment)next_context.environment->random_state=next_random_state;
     *car_context = next_context;
     return true;
 }
