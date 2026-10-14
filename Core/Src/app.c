@@ -40,7 +40,8 @@ static bool app_render_and_flush(const app_t *app)
             &display,
             &scene_depth_buffer,
             &view_matrix,
-            &app->projection))
+            &app->projection,
+            &app->car_context))
     {
         return false;
     }
