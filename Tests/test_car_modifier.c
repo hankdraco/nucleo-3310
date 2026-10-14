@@ -221,10 +221,6 @@ static bool test_car_route_stays_on_approach_before_turn(void)
         .position = { .x = 0.0f, .y = 1.0f, .z = -6.0f },
         .yaw_rad = 0.0f
     };
-    const car_trajectory_vec3_t pivot =
-    {
-        .x = 3.0f, .y = 0.0f, .z = -3.0f
-    };
     car_modifier_context_t context;
     geometry3d_instance_t instance = {0};
 
@@ -232,7 +228,8 @@ static bool test_car_route_stays_on_approach_before_turn(void)
         &context,
         &initial_pose,
         3.0f,
-        &pivot,
+        -3.0f,
+        3.0f,
         CAR_TURN_DIRECTION_RIGHT));
     CHECK(car_modifier_update(&instance, 0.5f, &context));
 
