@@ -20,7 +20,7 @@
 
 #define SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND (3.0f)
 #define SCENE_LOADER_CAR_TURN_RADIUS (3.0f)
-#define SCENE_LOADER_CAR_SPAWN_Z (-100.0f)
+#define SCENE_LOADER_CAR_SPAWN_Z (-40.0f)
 
 static const geometry3d_vector3_t
     scene_loader_attachment_positions[
