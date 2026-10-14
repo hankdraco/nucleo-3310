@@ -331,8 +331,8 @@ static bool scene_loader_add_car(
             &initial_pose,
             SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND,
             SCENE_LOADER_CAR_APPROACH_DISTANCE,
-            SCENE_LOADER_CAR_TURN_RADIUS,
-            CAR_TURN_DIRECTION_LEFT))
+            CAR_MANEUVER_LEFT,
+            SCENE_LOADER_CAR_TURN_RADIUS))
     {
         return false;
     }
