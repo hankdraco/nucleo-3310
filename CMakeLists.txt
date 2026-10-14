@@ -28,7 +28,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 project(${CMAKE_PROJECT_NAME})
 message("Build type: " ${CMAKE_BUILD_TYPE})
 
-# Enable CMake support for ASM and C languages
+# Enable support for ASM and C languages
 enable_language(C ASM)
 
 # Create an executable object type
@@ -68,6 +68,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/camera_controller.c
     Core/Src/car_trajectory.c
     Core/Src/car_modifier.c
+    Core/Src/car_lifecycle.c
 )
 
 # Add include paths
