@@ -10,6 +10,8 @@
 #include "car_modifier.h"
 #include "input_types.h"
 
+#define APP_CAR_COUNT 5U
+
 typedef struct
 {
     float render_accumulator_seconds;
@@ -20,7 +22,7 @@ typedef struct
 
     /* Shared environment and stable per-car state referenced by scene modifiers. */
     car_modifier_environment_t car_environment;
-    car_modifier_context_t car_context;
+    car_modifier_context_t car_contexts[APP_CAR_COUNT];
     projection_perspective_t projection;
 } app_t;
 
