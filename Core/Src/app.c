@@ -56,6 +56,12 @@ bool app_init(app_t *app)
     }
 
     app->render_accumulator_seconds = 0.0f;
+    app->car_environment = (car_modifier_environment_t){
+        .city_half_extent_x=160.0f,.city_half_extent_z=160.0f,
+        .street_half_width=12.8f,.lane_edge_offset=7.0f,
+        .minimum_speed_units_per_second=2.0f,.maximum_speed_units_per_second=4.0f,
+        .random_state=0x91E10DA5U
+    };
 
     /*
      * Load the scene, its camera and its projection.
@@ -65,7 +71,8 @@ bool app_init(app_t *app)
             &app->scene,
             &app->camera,
             &app->projection,
-            &app->car_context))
+            &app->car_context,
+            &app->car_environment))
     {
         return false;
     }
