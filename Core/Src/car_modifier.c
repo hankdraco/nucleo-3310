@@ -34,22 +34,18 @@ bool car_modifier_route_init(
     car_modifier_context_t *context,
     const car_trajectory_pose_t *initial_pose,
     float speed_units_per_second,
-    const car_trajectory_vec3_t *turn_pivot,
+    float turn_start_z,
+    float turn_radius,
     car_turn_direction_t turn_direction)
 {
     if (context == NULL ||
         initial_pose == NULL ||
-        turn_pivot == NULL ||
-        !isfinite(turn_pivot->x) ||
-        !isfinite(turn_pivot->y) ||
-        !isfinite(turn_pivot->z) ||
+        !isfinite(turn_start_z) ||
+        !isfinite(turn_radius) ||
+        turn_radius <= 0.0f ||
         !isfinite(initial_pose->yaw_rad) ||
         fabsf(initial_pose->yaw_rad) > CAR_MODIFIER_TOLERANCE ||
-        initial_pose->position.z >= turn_pivot->z ||
-        (turn_direction == CAR_TURN_DIRECTION_RIGHT &&
-         turn_pivot->x <= initial_pose->position.x) ||
-        (turn_direction == CAR_TURN_DIRECTION_LEFT &&
-         turn_pivot->x >= initial_pose->position.x) ||
+        initial_pose->position.z >= turn_start_z ||
         (turn_direction != CAR_TURN_DIRECTION_LEFT &&
          turn_direction != CAR_TURN_DIRECTION_RIGHT))
     {
@@ -67,7 +63,8 @@ bool car_modifier_route_init(
     }
 
     result.state = CAR_MODIFIER_STATE_APPROACH_TURN;
-    result.turn_pivot = *turn_pivot;
+    result.turn_start_z = turn_start_z;
+    result.turn_radius = turn_radius;
     result.turn_direction = turn_direction;
 
     *context = result;
@@ -113,7 +110,7 @@ bool car_modifier_update(
         else if (next_context.state == CAR_MODIFIER_STATE_APPROACH_TURN)
         {
             const float distance_to_turn =
-                next_context.turn_pivot.z -
+                next_context.turn_start_z -
                 next_context.trajectory.pose.position.z;
 
             if (!isfinite(distance_to_turn) ||
@@ -146,13 +143,34 @@ bool car_modifier_update(
             }
             else
             {
-                /* Arrive exactly at the turn start, without overshooting it. */
+                /*
+                 * Arrive exactly at the turn start, then capture the pivot
+                 * relative to the vehicle's current heading. The pivot stays
+                 * fixed in the trajectory snapshot for the whole quarter-turn.
+                 */
                 if (!car_trajectory_update(
                         &next_context.trajectory,
-                        time_to_turn) ||
-                    !car_trajectory_begin_turn(
+                        time_to_turn))
+                {
+                    return false;
+                }
+
+                const float turn_sign =
+                    (next_context.turn_direction ==
+                     CAR_TURN_DIRECTION_RIGHT) ? 1.0f : -1.0f;
+                const float yaw = next_context.trajectory.pose.yaw_rad;
+                const car_trajectory_vec3_t turn_pivot =
+                {
+                    .x = next_context.trajectory.pose.position.x +
+                         turn_sign * next_context.turn_radius * cosf(yaw),
+                    .y = next_context.trajectory.pose.position.y,
+                    .z = next_context.trajectory.pose.position.z -
+                         turn_sign * next_context.turn_radius * sinf(yaw)
+                };
+
+                if (!car_trajectory_begin_turn(
                         &next_context.trajectory,
-                        &next_context.turn_pivot,
+                        &turn_pivot,
                         next_context.turn_direction))
                 {
                     return false;
