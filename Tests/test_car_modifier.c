@@ -265,6 +265,7 @@ static bool test_car_route_stays_on_approach_before_turn(void)
     CHECK(context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
     CHECK(test_float_equal(instance.transform.position.z, -4.5f));
     CHECK(test_float_equal(instance.transform.position.x, 0.0f));
+    CHECK(test_float_equal(context.approach_distance_remaining, 1.5f));
 
     return true;
 }
