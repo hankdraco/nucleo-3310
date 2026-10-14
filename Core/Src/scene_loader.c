@@ -2,6 +2,7 @@
 
 #include "scene_loader.h"
 #include "cube_model.h"
+#include "car_modifier.h"
 #include "display.h"
 #include "modifier3d.h"
 #include "city_models.h"
@@ -16,6 +17,8 @@
 #define SCENE_LOADER_CITY_QUADRANTS   4U
 
 #define SCENE_LOADER_ATTACHMENT_COUNT   6U
+
+#define SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND (1.5f)
 
 static const geometry3d_vector3_t
     scene_loader_attachment_positions[
@@ -280,14 +283,98 @@ static bool scene_loader_add_city_buildings(scene3d_t *scene)
     return true;
 }
 
+
+/*
+ * Add one car instance to the central north-south street.
+ *
+ * The behavior context belongs to the caller (app_t), not this function's
+ * stack. scene3d_add_instance() copies the instance and its context pointer,
+ * so the caller-owned context must remain alive while the scene is updated.
+ */
+static bool scene_loader_add_car(
+    scene3d_t *scene,
+    car_modifier_context_t *car_context)
+{
+    if (scene == NULL || car_context == NULL)
+    {
+        return false;
+    }
+
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position =
+        {
+            .x = 0.0f,
+            .y = 0.25f,
+            .z = 4.0f
+        },
+        .yaw_rad = 0.0f
+    };
+
+    if (!car_modifier_context_init(
+            car_context,
+            &initial_pose,
+            SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND))
+    {
+        return false;
+    }
+
+    /*
+     * A small cube is a temporary visual proxy for the car. The trajectory
+     * and custom modifier do not depend on this particular model.
+     */
+    geometry3d_instance_t car =
+    {
+        .model = &geometry3d_cube_model,
+        .transform =
+        {
+            .position =
+            {
+                .x = initial_pose.position.x,
+                .y = initial_pose.position.y,
+                .z = initial_pose.position.z
+            },
+            .rotation_rad =
+            {
+                .x = 0.0f,
+                .y = initial_pose.yaw_rad,
+                .z = 0.0f
+            },
+            .scale =
+            {
+                .x = 0.25f,
+                .y = 0.20f,
+                .z = 0.45f
+            }
+        }
+    };
+
+    const modifier3d_config_t car_behavior =
+    {
+        .target = MODIFIER3D_TARGET_ALL,
+        .behavior = MODIFIER3D_BEHAVIOR_CUSTOM,
+        .custom_fn = car_modifier_update,
+        .context = car_context
+    };
+
+    if (!modifier3d_add(&car, &car_behavior))
+    {
+        return false;
+    }
+
+    return scene3d_add_instance(scene, &car);
+}
+
 bool scene_loader_load(
     scene3d_t *scene,
     camera3d_t *camera,
-    projection_perspective_t *projection)
+    projection_perspective_t *projection,
+    car_modifier_context_t *car_context)
 {
     if (scene == NULL ||
         camera == NULL ||
-        projection == NULL)
+        projection == NULL ||
+        car_context == NULL)
     {
         return false;
     }
@@ -498,7 +585,15 @@ bool scene_loader_load(
     }
 
     /*
-     * 6. Elevated oblique view of the city and central intersection.
+     * 6. One moving car on the central north-south street.
+     */
+    if (!scene_loader_add_car(scene, car_context))
+    {
+        goto fail;
+    }
+
+    /*
+     * 7. Elevated oblique view of the city and central intersection.
      */
     // camera->position.x = 36.0f;
     // camera->position.y = 52.0f;
