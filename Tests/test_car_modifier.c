@@ -149,10 +149,6 @@ static bool test_car_route_consumes_dt_across_approach_turn_and_departure(void)
         .position = { .x = 0.0f, .y = 1.0f, .z = -6.0f },
         .yaw_rad = 0.0f
     };
-    const car_trajectory_vec3_t pivot =
-    {
-        .x = 3.0f, .y = 0.0f, .z = -3.0f
-    };
     const float dt_seconds = 3.0f;
     const float turn_time_seconds = TEST_HALF_PI_RAD; /* speed / radius = 1 */
     const float remaining_straight_seconds =
@@ -165,7 +161,8 @@ static bool test_car_route_consumes_dt_across_approach_turn_and_departure(void)
         &context,
         &initial_pose,
         3.0f,
-        &pivot,
+        -3.0f,
+        3.0f,
         CAR_TURN_DIRECTION_RIGHT));
     CHECK(context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
 
@@ -184,6 +181,35 @@ static bool test_car_route_consumes_dt_across_approach_turn_and_departure(void)
     CHECK(test_float_equal(instance.transform.position.z, 0.0f));
     CHECK(test_float_equal(
         instance.transform.rotation_rad.y, TEST_HALF_PI_RAD));
+
+    return true;
+}
+
+static bool test_car_route_captures_pivot_relative_to_vehicle(void)
+{
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 2.8f, .y = 1.0f, .z = -40.0f },
+        .yaw_rad = 0.0f
+    };
+    car_modifier_context_t context;
+    geometry3d_instance_t instance = {0};
+
+    CHECK(car_modifier_route_init(
+        &context,
+        &initial_pose,
+        3.0f,
+        -12.8f,
+        10.0f,
+        CAR_TURN_DIRECTION_RIGHT));
+
+    /* Reach the intersection edge and advance a little way into the turn. */
+    CHECK(car_modifier_update(&instance, 9.1f, &context));
+
+    CHECK(context.state == CAR_MODIFIER_STATE_TURNING);
+    CHECK(test_float_equal(context.trajectory.turn_pivot.x, 12.8f));
+    CHECK(test_float_equal(context.trajectory.turn_pivot.y, 1.0f));
+    CHECK(test_float_equal(context.trajectory.turn_pivot.z, -12.8f));
 
     return true;
 }
@@ -224,6 +250,7 @@ bool test_car_modifier_suite(void)
     CHECK(test_car_modifier_propagates_trajectory_failure_atomically());
     CHECK(test_car_modifier_rejects_invalid_initialization());
     CHECK(test_car_route_consumes_dt_across_approach_turn_and_departure());
+    CHECK(test_car_route_captures_pivot_relative_to_vehicle());
     CHECK(test_car_route_stays_on_approach_before_turn());
 
     return true;
