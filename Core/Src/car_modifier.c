@@ -5,6 +5,23 @@
 
 #define CAR_MODIFIER_TOLERANCE (0.0001f)
 
+bool car_modifier_context_init_spawn(
+    car_modifier_context_t *context,
+    car_modifier_environment_t *environment)
+{
+    if (context == NULL || environment == NULL)
+    {
+        return false;
+    }
+
+    car_modifier_context_t result = {0};
+    result.state = CAR_MODIFIER_STATE_SPAWN;
+    result.environment = environment;
+    *context = result;
+
+    return true;
+}
+
 bool car_modifier_context_init(
     car_modifier_context_t *context,
     const car_trajectory_pose_t *initial_pose,
