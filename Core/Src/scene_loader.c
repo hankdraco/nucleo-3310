@@ -19,6 +19,8 @@
 #define SCENE_LOADER_ATTACHMENT_COUNT   6U
 
 #define SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND (3.0f)
+#define SCENE_LOADER_CAR_TURN_RADIUS (3.0f)
+#define SCENE_LOADER_CAR_SPAWN_Z (-100.0f)
 
 static const geometry3d_vector3_t
     scene_loader_attachment_positions[
@@ -305,16 +307,29 @@ static bool scene_loader_add_car(
         .position =
         {
             .x = 0.0f,
-            .y = 0.25f,
-            .z = 4.0f
+            .y = 1.0f,
+            .z = SCENE_LOADER_CAR_SPAWN_Z
         },
         .yaw_rad = 0.0f
     };
 
-    if (!car_modifier_context_init(
+    /*
+     * Approach from the -Z outskirts. The pivot is three units to the
+     * right of the lane and at the turn-start Z coordinate.
+     */
+    const car_trajectory_vec3_t turn_pivot =
+    {
+        .x = SCENE_LOADER_CAR_TURN_RADIUS,
+        .y = 0.0f,
+        .z = -SCENE_LOADER_CAR_TURN_RADIUS
+    };
+
+    if (!car_modifier_route_init(
             car_context,
             &initial_pose,
-            SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND))
+            SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND,
+            &turn_pivot,
+            CAR_TURN_DIRECTION_RIGHT))
     {
         return false;
     }
