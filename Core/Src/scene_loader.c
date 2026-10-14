@@ -11,6 +11,8 @@
 
 #define SCENE_LOADER_CITY_SCALE         (8.0f)
 #define SCENE_LOADER_CITY_HALF_EXTENT 20.0f
+#define SCENE_LOADER_STREET_HALF_WIDTH \
+    (1.6f * SCENE_LOADER_CITY_SCALE)
 
 #define SCENE_LOADER_BUILDING_COLUMNS 4U
 #define SCENE_LOADER_BUILDING_ROWS    3U
@@ -19,7 +21,11 @@
 #define SCENE_LOADER_ATTACHMENT_COUNT   6U
 
 #define SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND (3.0f)
-#define SCENE_LOADER_CAR_TURN_RADIUS (3.0f)
+#define SCENE_LOADER_CAR_LANE_EDGE_OFFSET (10.0f)
+#define SCENE_LOADER_CAR_TURN_START_Z \
+    (-SCENE_LOADER_STREET_HALF_WIDTH)
+#define SCENE_LOADER_CAR_TURN_RADIUS \
+    (SCENE_LOADER_CAR_LANE_EDGE_OFFSET)
 #define SCENE_LOADER_CAR_SPAWN_Z (-40.0f)
 
 static const geometry3d_vector3_t
@@ -306,7 +312,8 @@ static bool scene_loader_add_car(
     {
         .position =
         {
-            .x = 0.0f,
+            .x = SCENE_LOADER_STREET_HALF_WIDTH -
+                 SCENE_LOADER_CAR_LANE_EDGE_OFFSET,
             .y = 1.0f,
             .z = SCENE_LOADER_CAR_SPAWN_Z
         },
@@ -314,21 +321,17 @@ static bool scene_loader_add_car(
     };
 
     /*
-     * Approach from the -Z outskirts. The pivot is three units to the
-     * right of the lane and at the turn-start Z coordinate.
+     * Approach along the right-hand lane. At the near edge of the
+     * intersection, the route FSM captures a pivot one lane-edge offset
+     * to the vehicle's right. For this road layout, that places the pivot
+     * exactly at the intersection's right-hand corner.
      */
-    const car_trajectory_vec3_t turn_pivot =
-    {
-        .x = SCENE_LOADER_CAR_TURN_RADIUS,
-        .y = 0.0f,
-        .z = -SCENE_LOADER_CAR_TURN_RADIUS
-    };
-
     if (!car_modifier_route_init(
             car_context,
             &initial_pose,
             SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND,
-            &turn_pivot,
+            SCENE_LOADER_CAR_TURN_START_Z,
+            SCENE_LOADER_CAR_TURN_RADIUS,
             CAR_TURN_DIRECTION_RIGHT))
     {
         return false;
@@ -439,7 +442,7 @@ bool scene_loader_load(
                 .x = SCENE_LOADER_CITY_HALF_EXTENT *
                     SCENE_LOADER_CITY_SCALE,
                 .y = 1.0f,
-                .z = 1.6f * SCENE_LOADER_CITY_SCALE
+                .z = SCENE_LOADER_STREET_HALF_WIDTH
             }
         }
     };
@@ -453,7 +456,7 @@ bool scene_loader_load(
             .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
             .scale =
             {
-                .x = 1.6f * SCENE_LOADER_CITY_SCALE,
+                .x = SCENE_LOADER_STREET_HALF_WIDTH,
                 .y = 1.0f,
                 .z = SCENE_LOADER_CITY_HALF_EXTENT *
                     SCENE_LOADER_CITY_SCALE
