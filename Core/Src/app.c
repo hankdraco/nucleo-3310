@@ -71,7 +71,8 @@ bool app_init(app_t *app)
             &app->scene,
             &app->camera,
             &app->projection,
-            &app->car_context,
+            app->car_contexts,
+            APP_CAR_COUNT,
             &app->car_environment))
     {
         return false;
