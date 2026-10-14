@@ -20,14 +20,6 @@
 
 #define SCENE_LOADER_ATTACHMENT_COUNT   6U
 
-#define SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND (3.0f)
-#define SCENE_LOADER_CAR_LANE_EDGE_OFFSET (7.0f)
-#define SCENE_LOADER_CAR_SPAWN_Z (-40.0f)
-#define SCENE_LOADER_CAR_APPROACH_DISTANCE \
-    (-SCENE_LOADER_STREET_HALF_WIDTH - SCENE_LOADER_CAR_SPAWN_Z)
-#define SCENE_LOADER_CAR_TURN_RADIUS \
-    (2.0f * SCENE_LOADER_STREET_HALF_WIDTH - \
-     SCENE_LOADER_CAR_LANE_EDGE_OFFSET)
 
 static const geometry3d_vector3_t
     scene_loader_attachment_positions[
@@ -302,40 +294,23 @@ static bool scene_loader_add_city_buildings(scene3d_t *scene)
  */
 static bool scene_loader_add_car(
     scene3d_t *scene,
-    car_modifier_context_t *car_context)
+    car_modifier_context_t *car_context,
+    car_modifier_environment_t *car_environment)
 {
     if (scene == NULL || car_context == NULL)
     {
         return false;
     }
 
-    const car_trajectory_pose_t initial_pose =
-    {
-        .position =
-        {
-            .x = SCENE_LOADER_STREET_HALF_WIDTH -
-                 SCENE_LOADER_CAR_LANE_EDGE_OFFSET,
-            .y = 1.0f,
-            .z = SCENE_LOADER_CAR_SPAWN_Z
-        },
-        .yaw_rad = 0.0f
+    if (!car_modifier_context_init_spawn(car_context, car_environment)) return false;
+    geometry3d_instance_t car={
+      .model=&geometry3d_cube_model,
+      .transform={
+       .position={.x=0.0f,.y=1.0f,.z=0.0f},
+       .rotation_rad={.x=0.0f,.y=0.0f,.z=0.0f},
+       .scale={.x=1.25f,.y=1.00f,.z=2.25f}
+      }
     };
-
-    /*
-     * Approach along the right-hand lane, then make a left turn. The
-     * larger radius places the pivot on the intersection's left corner:
-     * street half-width + the car's X offset from the road centerline.
-     */
-    if (!car_modifier_route_init(
-            car_context,
-            &initial_pose,
-            SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND,
-            SCENE_LOADER_CAR_APPROACH_DISTANCE,
-            CAR_MANEUVER_LEFT,
-            SCENE_LOADER_CAR_TURN_RADIUS))
-    {
-        return false;
-    }
 
     /*
      * A small cube is a temporary visual proxy for the car. The trajectory
@@ -367,6 +342,8 @@ static bool scene_loader_add_car(
         }
     };
 
+    if (!car_modifier_update(&car, 0.0f, car_context)) return false;
+
     const modifier3d_config_t car_behavior =
     {
         .target = MODIFIER3D_TARGET_ALL,
@@ -387,12 +364,14 @@ bool scene_loader_load(
     scene3d_t *scene,
     camera3d_t *camera,
     projection_perspective_t *projection,
-    car_modifier_context_t *car_context)
+    car_modifier_context_t *car_context,
+    car_modifier_environment_t *car_environment)
 {
     if (scene == NULL ||
         camera == NULL ||
         projection == NULL ||
-        car_context == NULL)
+        car_context == NULL ||
+        car_environment == NULL)
     {
         return false;
     }
@@ -605,7 +584,7 @@ bool scene_loader_load(
     /*
      * 6. One moving car on the central north-south street.
      */
-    if (!scene_loader_add_car(scene, car_context))
+    if (!scene_loader_add_car(scene, car_context, car_environment))
     {
         goto fail;
     }
