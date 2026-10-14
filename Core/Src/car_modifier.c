@@ -34,18 +34,16 @@ bool car_modifier_route_init(
     car_modifier_context_t *context,
     const car_trajectory_pose_t *initial_pose,
     float speed_units_per_second,
-    float turn_start_z,
+    float distance_to_turn,
     float turn_radius,
     car_turn_direction_t turn_direction)
 {
     if (context == NULL ||
         initial_pose == NULL ||
-        !isfinite(turn_start_z) ||
+        !isfinite(distance_to_turn) ||
+        distance_to_turn < 0.0f ||
         !isfinite(turn_radius) ||
         turn_radius <= 0.0f ||
-        !isfinite(initial_pose->yaw_rad) ||
-        fabsf(initial_pose->yaw_rad) > CAR_MODIFIER_TOLERANCE ||
-        initial_pose->position.z >= turn_start_z ||
         (turn_direction != CAR_TURN_DIRECTION_LEFT &&
          turn_direction != CAR_TURN_DIRECTION_RIGHT))
     {
@@ -63,7 +61,7 @@ bool car_modifier_route_init(
     }
 
     result.state = CAR_MODIFIER_STATE_APPROACH_TURN;
-    result.turn_start_z = turn_start_z;
+    result.approach_distance_remaining = distance_to_turn;
     result.turn_radius = turn_radius;
     result.turn_direction = turn_direction;
 
@@ -110,8 +108,7 @@ bool car_modifier_update(
         else if (next_context.state == CAR_MODIFIER_STATE_APPROACH_TURN)
         {
             const float distance_to_turn =
-                next_context.turn_start_z -
-                next_context.trajectory.pose.position.z;
+                next_context.approach_distance_remaining;
 
             if (!isfinite(distance_to_turn) ||
                 distance_to_turn < -CAR_MODIFIER_TOLERANCE)
@@ -139,6 +136,10 @@ bool car_modifier_update(
                     return false;
                 }
 
+                next_context.approach_distance_remaining =
+                    clamped_distance -
+                    next_context.trajectory.speed_units_per_second *
+                    remaining_dt;
                 remaining_dt = 0.0f;
             }
             else
@@ -154,6 +155,8 @@ bool car_modifier_update(
                 {
                     return false;
                 }
+
+                next_context.approach_distance_remaining = 0.0f;
 
                 const float turn_sign =
                     (next_context.turn_direction ==

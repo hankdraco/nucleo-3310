@@ -27,8 +27,8 @@ typedef struct
     car_trajectory_t trajectory;
     car_modifier_state_t state;
 
-    /* Route configuration for the demo's +Z approach and 90-degree turn. */
-    float turn_start_z;
+    /* Remaining distance along the current heading before the turn begins. */
+    float approach_distance_remaining;
     float turn_radius;
     car_turn_direction_t turn_direction;
 } car_modifier_context_t;
@@ -40,16 +40,17 @@ bool car_modifier_context_init(
     float speed_units_per_second);
 
 /*
- * Initialize a car approaching a quarter-turn from +Z.
- * The turn starts when the car reaches turn_start_z. At that moment, the
- * pivot is captured turn_radius units to the car's right or left, based on
- * its current yaw, and remains fixed throughout the turn.
+ * Initialize a car approaching a quarter-turn from any heading.
+ * distance_to_turn is the distance travelled straight from the initial pose
+ * before the turn begins. At that moment, the pivot is captured turn_radius
+ * units to the car's right or left, based on its current yaw, and remains
+ * fixed throughout the turn.
  */
 bool car_modifier_route_init(
     car_modifier_context_t *context,
     const car_trajectory_pose_t *initial_pose,
     float speed_units_per_second,
-    float turn_start_z,
+    float distance_to_turn,
     float turn_radius,
     car_turn_direction_t turn_direction);
 
