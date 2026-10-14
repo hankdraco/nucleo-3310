@@ -18,7 +18,8 @@ typedef struct
     camera3d_t camera;
     camera_controller_t camera_controller;
 
-    /* Stable storage for the custom modifier copied into the scene. */
+    /* Shared environment and stable per-car state referenced by scene modifiers. */
+    car_modifier_environment_t car_environment;
     car_modifier_context_t car_context;
     projection_perspective_t projection;
 } app_t;
