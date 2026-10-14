@@ -25,7 +25,8 @@
 #define SCENE_LOADER_CAR_TURN_START_Z \
     (-SCENE_LOADER_STREET_HALF_WIDTH)
 #define SCENE_LOADER_CAR_TURN_RADIUS \
-    (SCENE_LOADER_CAR_LANE_EDGE_OFFSET)
+    (2.0f * SCENE_LOADER_STREET_HALF_WIDTH - \
+     SCENE_LOADER_CAR_LANE_EDGE_OFFSET)
 #define SCENE_LOADER_CAR_SPAWN_Z (-40.0f)
 
 static const geometry3d_vector3_t
@@ -321,10 +322,9 @@ static bool scene_loader_add_car(
     };
 
     /*
-     * Approach along the right-hand lane. At the near edge of the
-     * intersection, the route FSM captures a pivot one lane-edge offset
-     * to the vehicle's right. For this road layout, that places the pivot
-     * exactly at the intersection's right-hand corner.
+     * Approach along the right-hand lane, then make a left turn. The
+     * larger radius places the pivot on the intersection's left corner:
+     * street half-width + the car's X offset from the road centerline.
      */
     if (!car_modifier_route_init(
             car_context,
@@ -332,7 +332,7 @@ static bool scene_loader_add_car(
             SCENE_LOADER_CAR_SPEED_UNITS_PER_SECOND,
             SCENE_LOADER_CAR_TURN_START_Z,
             SCENE_LOADER_CAR_TURN_RADIUS,
-            CAR_TURN_DIRECTION_RIGHT))
+            CAR_TURN_DIRECTION_LEFT))
     {
         return false;
     }
