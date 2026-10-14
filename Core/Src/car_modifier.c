@@ -34,18 +34,17 @@ bool car_modifier_route_init(
     car_modifier_context_t *context,
     const car_trajectory_pose_t *initial_pose,
     float speed_units_per_second,
-    float distance_to_turn,
-    float turn_radius,
-    car_turn_direction_t turn_direction)
+    float distance_to_maneuver,
+    car_maneuver_t maneuver,
+    float turn_radius)
 {
-    if (context == NULL ||
-        initial_pose == NULL ||
-        !isfinite(distance_to_turn) ||
-        distance_to_turn < 0.0f ||
-        !isfinite(turn_radius) ||
-        turn_radius <= 0.0f ||
-        (turn_direction != CAR_TURN_DIRECTION_LEFT &&
-         turn_direction != CAR_TURN_DIRECTION_RIGHT))
+    const bool is_turn =
+        maneuver == CAR_MANEUVER_LEFT || maneuver == CAR_MANEUVER_RIGHT;
+
+    if (context == NULL || initial_pose == NULL ||
+        !isfinite(distance_to_maneuver) || distance_to_maneuver < 0.0f ||
+        (maneuver != CAR_MANEUVER_STRAIGHT && !is_turn) ||
+        (is_turn && (!isfinite(turn_radius) || turn_radius <= 0.0f)))
     {
         return false;
     }
@@ -61,9 +60,9 @@ bool car_modifier_route_init(
     }
 
     result.state = CAR_MODIFIER_STATE_APPROACH_TURN;
-    result.approach_distance_remaining = distance_to_turn;
-    result.turn_radius = turn_radius;
-    result.turn_direction = turn_direction;
+    result.approach_distance_remaining = distance_to_maneuver;
+    result.turn_radius = is_turn ? turn_radius : 0.0f;
+    result.maneuver = maneuver;
 
     *context = result;
     return true;
@@ -158,9 +157,20 @@ bool car_modifier_update(
 
                 next_context.approach_distance_remaining = 0.0f;
 
+                remaining_dt -= time_to_turn;
+
+                if (next_context.maneuver == CAR_MANEUVER_STRAIGHT)
+                {
+                    next_context.state = CAR_MODIFIER_STATE_DEPARTING;
+                    continue;
+                }
+
+                const car_turn_direction_t turn_direction =
+                    (next_context.maneuver == CAR_MANEUVER_RIGHT)
+                        ? CAR_TURN_DIRECTION_RIGHT
+                        : CAR_TURN_DIRECTION_LEFT;
                 const float turn_sign =
-                    (next_context.turn_direction ==
-                     CAR_TURN_DIRECTION_RIGHT) ? 1.0f : -1.0f;
+                    (turn_direction == CAR_TURN_DIRECTION_RIGHT) ? 1.0f : -1.0f;
                 const float yaw = next_context.trajectory.pose.yaw_rad;
                 const car_trajectory_vec3_t turn_pivot =
                 {
@@ -172,14 +182,11 @@ bool car_modifier_update(
                 };
 
                 if (!car_trajectory_begin_turn(
-                        &next_context.trajectory,
-                        &turn_pivot,
-                        next_context.turn_direction))
+                        &next_context.trajectory, &turn_pivot, turn_direction))
                 {
                     return false;
                 }
 
-                remaining_dt -= time_to_turn;
                 next_context.state = CAR_MODIFIER_STATE_TURNING;
             }
         }

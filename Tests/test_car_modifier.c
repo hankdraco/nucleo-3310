@@ -162,8 +162,8 @@ static bool test_car_route_consumes_dt_across_approach_turn_and_departure(void)
         &initial_pose,
         3.0f,
         3.0f,
-        3.0f,
-        CAR_TURN_DIRECTION_RIGHT));
+        CAR_MANEUVER_RIGHT,
+        3.0f));
     CHECK(context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
 
     CHECK(car_modifier_update(&instance, dt_seconds, &context));
@@ -200,8 +200,8 @@ static bool test_car_route_captures_pivot_relative_to_vehicle(void)
         &initial_pose,
         3.0f,
         27.2f,
-        10.0f,
-        CAR_TURN_DIRECTION_RIGHT));
+        CAR_MANEUVER_RIGHT,
+        10.0f));
 
     /* Reach the intersection edge and advance a little way into the turn. */
     CHECK(car_modifier_update(&instance, 9.1f, &context));
@@ -229,8 +229,8 @@ static bool test_car_route_captures_left_pivot_relative_to_vehicle(void)
         &initial_pose,
         3.0f,
         27.2f,
-        18.6f,
-        CAR_TURN_DIRECTION_LEFT));
+        CAR_MANEUVER_LEFT,
+        18.6f));
 
     /* The pivot is captured at the left intersection corner. */
     CHECK(car_modifier_update(&instance, 9.1f, &context));
@@ -258,8 +258,8 @@ static bool test_car_route_stays_on_approach_before_turn(void)
         &initial_pose,
         3.0f,
         3.0f,
-        3.0f,
-        CAR_TURN_DIRECTION_RIGHT));
+        CAR_MANEUVER_RIGHT,
+        3.0f));
     CHECK(car_modifier_update(&instance, 0.5f, &context));
 
     CHECK(context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
@@ -286,8 +286,8 @@ static bool test_car_route_supports_a_different_cardinal_heading(void)
         &initial_pose,
         3.0f,
         3.0f,
-        3.0f,
-        CAR_TURN_DIRECTION_RIGHT));
+        CAR_MANEUVER_RIGHT,
+        3.0f));
 
     /* The car approaches along +X, then captures a pivot on its right (-Z). */
     CHECK(car_modifier_update(&instance, 1.0f, &context));
@@ -302,6 +302,42 @@ static bool test_car_route_supports_a_different_cardinal_heading(void)
     return true;
 }
 
+
+static bool test_car_route_supports_straight_through_maneuver(void)
+{
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 2.0f, .y = 1.0f, .z = -6.0f },
+        .yaw_rad = 0.0f
+    };
+    car_modifier_context_t context;
+    geometry3d_instance_t instance = {0};
+    CHECK(car_modifier_route_init(
+        &context, &initial_pose, 3.0f, 3.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    CHECK(car_modifier_update(&instance, 2.0f, &context));
+    CHECK(context.state == CAR_MODIFIER_STATE_DEPARTING);
+    CHECK(context.trajectory.phase == CAR_TRAJECTORY_STRAIGHT);
+    CHECK(test_float_equal(instance.transform.position.x, 2.0f));
+    CHECK(test_float_equal(instance.transform.position.y, 1.0f));
+    CHECK(test_float_equal(instance.transform.position.z, 0.0f));
+    CHECK(test_float_equal(instance.transform.rotation_rad.y, 0.0f));
+    return true;
+}
+
+static bool test_car_route_rejects_invalid_maneuver(void)
+{
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
+        .yaw_rad = 0.0f
+    };
+    car_modifier_context_t context;
+    CHECK(!car_modifier_route_init(
+        &context, &initial_pose, 3.0f, 1.0f,
+        (car_maneuver_t)99, 2.0f));
+    return true;
+}
 bool test_car_modifier_suite(void)
 {
     CHECK(test_car_modifier_maps_straight_pose());
@@ -313,6 +349,8 @@ bool test_car_modifier_suite(void)
     CHECK(test_car_route_captures_left_pivot_relative_to_vehicle());
     CHECK(test_car_route_stays_on_approach_before_turn());
     CHECK(test_car_route_supports_a_different_cardinal_heading());
+    CHECK(test_car_route_supports_straight_through_maneuver());
+    CHECK(test_car_route_rejects_invalid_maneuver());
 
     return true;
 }
