@@ -303,42 +303,19 @@ static bool scene_loader_add_car(
     }
 
     if (!car_modifier_context_init_spawn(car_context, car_environment)) return false;
-    geometry3d_instance_t car={
-      .model=&geometry3d_cube_model,
-      .transform={
-       .position={.x=0.0f,.y=1.0f,.z=0.0f},
-       .rotation_rad={.x=0.0f,.y=0.0f,.z=0.0f},
-       .scale={.x=1.25f,.y=1.00f,.z=2.25f}
-      }
-    };
-
     /*
-     * A small cube is a temporary visual proxy for the car. The trajectory
-     * and custom modifier do not depend on this particular model.
+     * A small cube is a temporary visual proxy for the car. The spawn
+     * state initializes its transform before the first rendered frame.
+     * The trajectory and custom modifier do not depend on this model.
      */
     geometry3d_instance_t car =
     {
         .model = &geometry3d_cube_model,
         .transform =
         {
-            .position =
-            {
-                .x = initial_pose.position.x,
-                .y = initial_pose.position.y,
-                .z = initial_pose.position.z
-            },
-            .rotation_rad =
-            {
-                .x = 0.0f,
-                .y = initial_pose.yaw_rad,
-                .z = 0.0f
-            },
-            .scale =
-            {
-                .x = 1.25f,
-                .y = 1.00f,
-                .z = 2.25f
-            }
+            .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+            .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
+            .scale = { .x = 1.25f, .y = 1.00f, .z = 2.25f }
         }
     };
 
