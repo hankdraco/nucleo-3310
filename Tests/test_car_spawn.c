@@ -20,8 +20,8 @@ static car_modifier_environment_t make_test_environment(uint32_t seed)
         .city_half_extent_z = 160.0f,
         .street_half_width = 12.8f,
         .lane_edge_offset = 7.0f,
-        .minimum_speed_units_per_second = 2.0f,
-        .maximum_speed_units_per_second = 4.0f,
+        .minimum_speed_units_per_second = 12.0f,
+        .maximum_speed_units_per_second = 18.0f,
         .random_state = seed
     };
 }
@@ -45,6 +45,23 @@ static bool test_car_spawn_state_is_processed_with_zero_dt(void)
           environment.minimum_speed_units_per_second);
     CHECK(context.trajectory.speed_units_per_second <=
           environment.maximum_speed_units_per_second);
+    if (context.maneuver == CAR_MANEUVER_RIGHT)
+    {
+        CHECK(test_float_equal(
+            context.turn_radius, environment.lane_edge_offset));
+    }
+    else if (context.maneuver == CAR_MANEUVER_LEFT)
+    {
+        CHECK(test_float_equal(
+            context.turn_radius,
+            2.0f * environment.street_half_width -
+                environment.lane_edge_offset));
+    }
+    else
+    {
+        CHECK(context.maneuver == CAR_MANEUVER_STRAIGHT);
+        CHECK(test_float_equal(context.turn_radius, 0.0f));
+    }
     CHECK(context.trajectory.pose.position.x >=
           -environment.city_half_extent_x);
     CHECK(context.trajectory.pose.position.x <=
