@@ -14,6 +14,7 @@ add_executable(nucleo_3310_tests
     test_input_state.c
     test_camera3d.c
     test_camera_controller.c
+    test_car_trajectory.c
     ../Core/Src/pcd8544.c
     ../Core/Src/display.c
     ../Core/Src/display_pcd8544.c
@@ -23,6 +24,7 @@ add_executable(nucleo_3310_tests
     ../Core/Src/camera_controller.c
     ../Core/Src/geometry3d.c
     ../Core/Src/matrix4.c
+    ../Core/Src/car_trajectory.c
 )
 
 target_include_directories(nucleo_3310_tests PRIVATE

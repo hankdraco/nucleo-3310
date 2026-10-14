@@ -144,7 +144,7 @@ The camera implementation supports:
 The free-fly controller provides first-person-style movement:
 
 | Input | Action |
-|---|---|
+| --- | --- |
 | W / S | Move forward / backward |
 | A / D | Strafe left / right |
 | Space / Ctrl | Move vertically |
