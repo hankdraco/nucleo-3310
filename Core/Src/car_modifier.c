@@ -45,9 +45,22 @@ static bool car_modifier_spawn(car_modifier_context_t *c,uint32_t *committed)
  default:pose.position.x=e->city_half_extent_x;pose.position.z=lane;pose.yaw_rad=-CAR_MODIFIER_PI_RAD*0.5f;break;
  }
  float distance=entry<2U?e->city_half_extent_z-e->street_half_width:e->city_half_extent_x-e->street_half_width;
- float radius=2.0f*e->street_half_width-e->lane_edge_offset;
+ /*
+  * Every car spawns in its right-hand lane. A right turn follows the
+  * inner corner (lane_edge_offset); a left turn follows the outer corner
+  * (two street half-widths minus the lane offset).
+  */
+ float radius = 0.0f;
+ if (maneuver == CAR_MANEUVER_RIGHT)
+ {
+     radius = e->lane_edge_offset;
+ }
+ else if (maneuver == CAR_MANEUVER_LEFT)
+ {
+     radius = 2.0f * e->street_half_width - e->lane_edge_offset;
+ }
  car_modifier_context_t result={0};
- if(!car_modifier_route_init(&result,&pose,speed,distance,maneuver,maneuver==CAR_MANEUVER_STRAIGHT?0.0f:radius))return false;
+ if(!car_modifier_route_init(&result,&pose,speed,distance,maneuver,radius))return false;
  result.environment=e;*c=result;*committed=rng;return true;
 }
 
