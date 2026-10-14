@@ -40,8 +40,7 @@ static bool app_render_and_flush(const app_t *app)
             &display,
             &scene_depth_buffer,
             &view_matrix,
-            &app->projection,
-            &app->car_context))
+            &app->projection))
     {
         return false;
     }
@@ -65,7 +64,8 @@ bool app_init(app_t *app)
     if (!scene_loader_load(
             &app->scene,
             &app->camera,
-            &app->projection))
+            &app->projection,
+            &app->car_context))
     {
         return false;
     }
