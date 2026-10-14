@@ -7,6 +7,7 @@
 #include "projection.h"
 #include "scene3d.h"
 #include "camera_controller.h"
+#include "car_modifier.h"
 #include "input_types.h"
 
 typedef struct
@@ -16,6 +17,9 @@ typedef struct
     scene3d_t scene;
     camera3d_t camera;
     camera_controller_t camera_controller;
+
+    /* Stable storage for the custom modifier copied into the scene. */
+    car_modifier_context_t car_context;
     projection_perspective_t projection;
 } app_t;
 
