@@ -2,6 +2,7 @@
 #define CAR_MODIFIER_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "car_trajectory.h"
 #include "geometry3d.h"
@@ -15,8 +16,24 @@ typedef enum
     CAR_MODIFIER_STATE_FREE = 0,
     CAR_MODIFIER_STATE_APPROACH_TURN,
     CAR_MODIFIER_STATE_TURNING,
-    CAR_MODIFIER_STATE_DEPARTING
+    CAR_MODIFIER_STATE_DEPARTING,
+    CAR_MODIFIER_STATE_SPAWN
 } car_modifier_state_t;
+
+/*
+ * Shared world data for all cars. Each car context holds only a pointer to
+ * this object; the random generator state is shared and deterministic.
+ */
+typedef struct
+{
+    float city_half_extent_x;
+    float city_half_extent_z;
+    float street_half_width;
+    float lane_edge_offset;
+    float minimum_speed_units_per_second;
+    float maximum_speed_units_per_second;
+    uint32_t random_state;
+} car_modifier_environment_t;
 
 /*
  * Caller-owned runtime state for one car custom modifier.
@@ -36,7 +53,13 @@ typedef struct
     float approach_distance_remaining;
     float turn_radius;
     car_maneuver_t maneuver;
+    car_modifier_environment_t *environment;
 } car_modifier_context_t;
+
+/* Prepare a context for its first one-shot SPAWN update. */
+bool car_modifier_context_init_spawn(
+    car_modifier_context_t *context,
+    car_modifier_environment_t *environment);
 
 /* Initialize a car without a route FSM (straight trajectory only). */
 bool car_modifier_context_init(
