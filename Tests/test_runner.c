@@ -80,7 +80,7 @@ int main(void)
     }
     printf("CAR SPAWN TESTS PASSED\n");
 
-if (!test_modifier3d_suite())
+    if (!test_modifier3d_suite())
     {
         printf("MODIFIER3D TESTS FAILED\n");
         return 1;
