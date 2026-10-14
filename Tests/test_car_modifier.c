@@ -214,6 +214,35 @@ static bool test_car_route_captures_pivot_relative_to_vehicle(void)
     return true;
 }
 
+static bool test_car_route_captures_left_pivot_relative_to_vehicle(void)
+{
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 5.8f, .y = 1.0f, .z = -40.0f },
+        .yaw_rad = 0.0f
+    };
+    car_modifier_context_t context;
+    geometry3d_instance_t instance = {0};
+
+    CHECK(car_modifier_route_init(
+        &context,
+        &initial_pose,
+        3.0f,
+        -12.8f,
+        18.6f,
+        CAR_TURN_DIRECTION_LEFT));
+
+    /* The pivot is captured at the left intersection corner. */
+    CHECK(car_modifier_update(&instance, 9.1f, &context));
+
+    CHECK(context.state == CAR_MODIFIER_STATE_TURNING);
+    CHECK(test_float_equal(context.trajectory.turn_pivot.x, -12.8f));
+    CHECK(test_float_equal(context.trajectory.turn_pivot.y, 1.0f));
+    CHECK(test_float_equal(context.trajectory.turn_pivot.z, -12.8f));
+
+    return true;
+}
+
 static bool test_car_route_stays_on_approach_before_turn(void)
 {
     const car_trajectory_pose_t initial_pose =
@@ -248,6 +277,7 @@ bool test_car_modifier_suite(void)
     CHECK(test_car_modifier_rejects_invalid_initialization());
     CHECK(test_car_route_consumes_dt_across_approach_turn_and_departure());
     CHECK(test_car_route_captures_pivot_relative_to_vehicle());
+    CHECK(test_car_route_captures_left_pivot_relative_to_vehicle());
     CHECK(test_car_route_stays_on_approach_before_turn());
 
     return true;
