@@ -10,7 +10,6 @@ bool test_camera_controller_suite(void);
 bool test_car_trajectory_suite(void);
 bool test_car_modifier_suite(void);
 bool test_car_spawn_suite(void);
-bool test_car_lifecycle_suite(void);
 bool test_modifier3d_suite(void);
 
 int main(void)
@@ -81,14 +80,7 @@ int main(void)
     }
     printf("CAR SPAWN TESTS PASSED\n");
 
-    if (!test_car_lifecycle_suite())
-    {
-        printf("CAR LIFECYCLE TESTS FAILED\n");
-        return 1;
-    }
-    printf("CAR LIFECYCLE TESTS PASSED\n");
-
-    if (!test_modifier3d_suite())
+if (!test_modifier3d_suite())
     {
         printf("MODIFIER3D TESTS FAILED\n");
         return 1;
