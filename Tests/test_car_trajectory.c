@@ -336,3 +336,17 @@ bool test_car_trajectory_suite(void)
 
     return true;
 }
+bool test_car_trajectory_suite(void)
+{
+    CHECK(test_initialization_and_straight_motion());
+    CHECK(test_straight_motion_uses_yaw());
+    CHECK(test_turn_preserves_radius_and_linear_speed());
+    CHECK(test_right_turn_finishes_at_exact_quarter_turn());
+    CHECK(test_left_turn_has_the_opposite_yaw_sign());
+    CHECK(test_large_dt_preserves_time_after_turn());
+    CHECK(test_turn_result_does_not_depend_on_update_partitioning());
+    CHECK(test_invalid_operations_do_not_change_state());
+    CHECK(test_trajectory_pose_is_applied_to_geometry_instance());
+
+    return true;
+}
