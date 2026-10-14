@@ -141,12 +141,90 @@ static bool test_car_modifier_rejects_invalid_initialization(void)
     return true;
 }
 
+
+static bool test_car_route_consumes_dt_across_approach_turn_and_departure(void)
+{
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = -6.0f },
+        .yaw_rad = 0.0f
+    };
+    const car_trajectory_vec3_t pivot =
+    {
+        .x = 3.0f, .y = 0.0f, .z = -3.0f
+    };
+    const float dt_seconds = 3.0f;
+    const float turn_time_seconds = TEST_HALF_PI_RAD; /* speed / radius = 1 */
+    const float remaining_straight_seconds =
+        dt_seconds - 1.0f - turn_time_seconds;
+
+    car_modifier_context_t context;
+    geometry3d_instance_t instance = {0};
+
+    CHECK(car_modifier_route_init(
+        &context,
+        &initial_pose,
+        3.0f,
+        &pivot,
+        CAR_TURN_DIRECTION_RIGHT));
+    CHECK(context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+
+    CHECK(car_modifier_update(&instance, dt_seconds, &context));
+
+    /*
+     * One second reaches the turn, PI/2 seconds completes it, and the
+     * remaining time advances the car along +X during the same update.
+     */
+    CHECK(context.state == CAR_MODIFIER_STATE_DEPARTING);
+    CHECK(context.trajectory.phase == CAR_TRAJECTORY_STRAIGHT);
+    CHECK(test_float_equal(
+        instance.transform.position.x,
+        3.0f + 3.0f * remaining_straight_seconds));
+    CHECK(test_float_equal(instance.transform.position.y, 1.0f));
+    CHECK(test_float_equal(instance.transform.position.z, 0.0f));
+    CHECK(test_float_equal(
+        instance.transform.rotation_rad.y, TEST_HALF_PI_RAD));
+
+    return true;
+}
+
+static bool test_car_route_stays_on_approach_before_turn(void)
+{
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = -6.0f },
+        .yaw_rad = 0.0f
+    };
+    const car_trajectory_vec3_t pivot =
+    {
+        .x = 3.0f, .y = 0.0f, .z = -3.0f
+    };
+    car_modifier_context_t context;
+    geometry3d_instance_t instance = {0};
+
+    CHECK(car_modifier_route_init(
+        &context,
+        &initial_pose,
+        3.0f,
+        &pivot,
+        CAR_TURN_DIRECTION_RIGHT));
+    CHECK(car_modifier_update(&instance, 0.5f, &context));
+
+    CHECK(context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+    CHECK(test_float_equal(instance.transform.position.z, -4.5f));
+    CHECK(test_float_equal(instance.transform.position.x, 0.0f));
+
+    return true;
+}
+
 bool test_car_modifier_suite(void)
 {
     CHECK(test_car_modifier_maps_straight_pose());
     CHECK(test_car_modifier_maps_turn_yaw());
     CHECK(test_car_modifier_propagates_trajectory_failure_atomically());
     CHECK(test_car_modifier_rejects_invalid_initialization());
+    CHECK(test_car_route_consumes_dt_across_approach_turn_and_departure());
+    CHECK(test_car_route_stays_on_approach_before_turn());
 
     return true;
 }
