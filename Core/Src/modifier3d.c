@@ -51,11 +51,24 @@ static float *modifier3d_get_target_pointer(
 static bool modifier3d_config_is_valid(
     const modifier3d_config_t *config)
 {
-    if (config == NULL ||
-        (unsigned int)config->target >=
+    if (config == NULL)
+    {
+        return false;
+    }
+
+    if (config->behavior == MODIFIER3D_BEHAVIOR_CUSTOM)
+    {
+        return config->target == MODIFIER3D_TARGET_ALL &&
+               config->custom_fn != NULL &&
+               config->context != NULL;
+    }
+
+    if ((unsigned int)config->target >=
             (unsigned int)MODIFIER3D_TARGET_COUNT ||
         (unsigned int)config->behavior >
-            (unsigned int)MODIFIER3D_BEHAVIOR_ABS_SIN)
+            (unsigned int)MODIFIER3D_BEHAVIOR_ABS_SIN ||
+        config->custom_fn != NULL ||
+        config->context != NULL)
     {
         return false;
     }
@@ -104,23 +117,26 @@ bool modifier3d_add(
         return false;
     }
 
-    float *target_value = modifier3d_get_target_pointer(
-        &instance->transform,
-        config->target);
-
-    if (target_value == NULL || !isfinite(*target_value))
+    if (config->behavior != MODIFIER3D_BEHAVIOR_CUSTOM)
     {
-        return false;
-    }
+        float *target_value = modifier3d_get_target_pointer(
+            &instance->transform,
+            config->target);
 
-    /*
-     * Require the current parameter value to be inside the
-     * modifier's configured range.
-     */
-    if (*target_value < config->min_value ||
-        *target_value > config->max_value)
-    {
-        return false;
+        if (target_value == NULL || !isfinite(*target_value))
+        {
+            return false;
+        }
+
+        /*
+         * Require the current parameter value to be inside the
+         * modifier's configured range.
+         */
+        if (*target_value < config->min_value ||
+            *target_value > config->max_value)
+        {
+            return false;
+        }
     }
 
     /*
@@ -150,6 +166,8 @@ bool modifier3d_add(
      */
     if (config->behavior == MODIFIER3D_BEHAVIOR_ABS_SIN)
     {
+        float *target_value = modifier3d_get_target_pointer(
+            &instance->transform, config->target);
         const float range =
             config->max_value - config->min_value;
 
@@ -204,6 +222,16 @@ bool modifier3d_update_instance(
         if (!modifier3d_config_is_valid(config))
         {
             return false;
+        }
+
+        if (config->behavior == MODIFIER3D_BEHAVIOR_CUSTOM)
+        {
+            if (!config->custom_fn(instance, dt_seconds, config->context))
+            {
+                return false;
+            }
+
+            continue;
         }
 
         float *target_value = modifier3d_get_target_pointer(

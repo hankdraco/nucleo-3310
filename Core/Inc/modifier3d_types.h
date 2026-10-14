@@ -1,8 +1,12 @@
 #ifndef MODIFIER3D_TYPES_H
 #define MODIFIER3D_TYPES_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+struct geometry3d_instance;
+typedef struct geometry3d_instance geometry3d_instance_t;
 
 /*
  * One modifier per scalar transform parameter.
@@ -22,6 +26,9 @@ typedef enum
     MODIFIER3D_TARGET_SCALE_X,
     MODIFIER3D_TARGET_SCALE_Y,
     MODIFIER3D_TARGET_SCALE_Z,
+
+    /* Custom behaviors may operate on the complete instance transform. */
+    MODIFIER3D_TARGET_ALL,
 
     MODIFIER3D_TARGET_COUNT
 } modifier3d_target_t;
@@ -45,8 +52,16 @@ typedef enum
      *
      * min_value + (max_value - min_value) * abs(sin(phase))
      */
-    MODIFIER3D_BEHAVIOR_ABS_SIN
+    MODIFIER3D_BEHAVIOR_ABS_SIN,
+
+    /* Invoke the callback supplied when the modifier was created. */
+    MODIFIER3D_BEHAVIOR_CUSTOM
 } modifier3d_behavior_t;
+
+typedef bool (*modifier3d_custom_fn)(
+    geometry3d_instance_t *instance,
+    float dt_seconds,
+    void *context);
 
 /*
  * User-configurable part of a modifier.
@@ -67,6 +82,10 @@ typedef struct
      * signed phase velocity in radians per second.
      */
     float speed;
+
+    /* Required only for CUSTOM behavior; context is caller-owned. */
+    modifier3d_custom_fn custom_fn;
+    void *context;
 } modifier3d_config_t;
 
 /*

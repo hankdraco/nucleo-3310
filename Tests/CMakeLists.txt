@@ -15,8 +15,8 @@ add_executable(nucleo_3310_tests
     test_camera3d.c
     test_camera_controller.c
     test_car_trajectory.c
-    ../Core/Src/car_trajectory_instance.c
-    ../Core/Src/car_vehicle.c
+    test_modifier3d.c
+    ../Core/Src/modifier3d.c
     ../Core/Src/pcd8544.c
     ../Core/Src/display.c
     ../Core/Src/display_pcd8544.c

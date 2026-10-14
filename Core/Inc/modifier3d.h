@@ -10,7 +10,13 @@
  * Add a modifier to an instance.
  *
  * The modifier is initialized from the instance's current parameter
- * value. Adding another modifier targeting the same parameter fails.
+ * value. Adding another scalar modifier targeting the same parameter fails.
+ *
+ * CUSTOM modifiers use target MODIFIER3D_TARGET_ALL and require non-NULL
+ * custom_fn and context. The callback receives the instance, dt and context.
+ * Context memory is caller-owned and must remain valid for as long as any
+ * instance or scene copy may invoke the modifier. Copies retain the pointer;
+ * context data itself is not copied and no dynamic allocation is performed.
  */
 bool modifier3d_add(
     geometry3d_instance_t *instance,

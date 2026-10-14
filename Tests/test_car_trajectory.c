@@ -1,6 +1,4 @@
 #include "car_trajectory.h"
-#include "car_trajectory_instance.h"
-#include "geometry3d.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -251,77 +249,6 @@ static bool test_invalid_operations_do_not_change_state(void)
 }
 
 
-static bool test_trajectory_pose_is_applied_to_geometry_instance(void)
-{
-    const car_trajectory_pose_t initial_pose =
-    {
-        .position = { .x = 1.0f, .y = 0.5f, .z = -2.0f },
-        .yaw_rad = TEST_QUARTER_PI_RAD
-    };
-    const car_trajectory_pose_t turn_start =
-    {
-        .position = { .x = -2.0f, .y = 0.0f, .z = 0.0f },
-        .yaw_rad = 0.0f
-    };
-    const car_trajectory_vec3_t turn_pivot =
-    {
-        .x = 0.0f, .y = 0.0f, .z = 0.0f
-    };
-    car_trajectory_t trajectory;
-    geometry3d_instance_t instance = {0};
-
-    instance.transform.position.x = -99.0f;
-    instance.transform.position.y = -99.0f;
-    instance.transform.position.z = -99.0f;
-    instance.transform.rotation_rad.y = -99.0f;
-
-    CHECK(car_trajectory_init(&trajectory, &initial_pose, 2.0f));
-    CHECK(car_trajectory_update(&trajectory, 0.5f));
-    CHECK(car_trajectory_apply_pose(&trajectory, &instance));
-
-    CHECK(test_float_equal(
-        instance.transform.position.x, trajectory.pose.position.x));
-    CHECK(test_float_equal(
-        instance.transform.position.y, trajectory.pose.position.y));
-    CHECK(test_float_equal(
-        instance.transform.position.z, trajectory.pose.position.z));
-    CHECK(test_float_equal(
-        instance.transform.rotation_rad.y, trajectory.pose.yaw_rad));
-
-    /* The same adapter must preserve both position and yaw during a turn. */
-    CHECK(car_trajectory_init(&trajectory, &turn_start, 2.0f));
-    CHECK(car_trajectory_begin_turn(
-        &trajectory, &turn_pivot, CAR_TURN_DIRECTION_RIGHT));
-    CHECK(car_trajectory_update(&trajectory, TEST_QUARTER_PI_RAD));
-    CHECK(car_trajectory_apply_pose(&trajectory, &instance));
-
-    CHECK(test_float_equal(
-        instance.transform.position.x, trajectory.pose.position.x));
-    CHECK(test_float_equal(
-        instance.transform.position.y, trajectory.pose.position.y));
-    CHECK(test_float_equal(
-        instance.transform.position.z, trajectory.pose.position.z));
-    CHECK(test_float_equal(
-        instance.transform.rotation_rad.y, TEST_QUARTER_PI_RAD));
-
-    /* Invalid pose data must not partially overwrite the render transform. */
-    {
-        const geometry3d_transform_t before = instance.transform;
-        trajectory.pose.yaw_rad = INFINITY;
-        CHECK(!car_trajectory_apply_pose(&trajectory, &instance));
-        CHECK(test_float_equal(
-            instance.transform.position.x, before.position.x));
-        CHECK(test_float_equal(
-            instance.transform.position.y, before.position.y));
-        CHECK(test_float_equal(
-            instance.transform.position.z, before.position.z));
-        CHECK(test_float_equal(
-            instance.transform.rotation_rad.y, before.rotation_rad.y));
-    }
-
-    return true;
-}
-
 bool test_car_trajectory_suite(void)
 {
     CHECK(test_initialization_and_straight_motion());
@@ -332,7 +259,6 @@ bool test_car_trajectory_suite(void)
     CHECK(test_large_dt_preserves_time_after_turn());
     CHECK(test_turn_result_does_not_depend_on_update_partitioning());
     CHECK(test_invalid_operations_do_not_change_state());
-    CHECK(test_trajectory_pose_is_applied_to_geometry_instance());
 
     return true;
 }

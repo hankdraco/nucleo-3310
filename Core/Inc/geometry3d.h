@@ -58,13 +58,13 @@ typedef struct
     geometry3d_vector3_t scale;
 } geometry3d_transform_t;
 
-typedef struct
+struct geometry3d_instance
 {
     const geometry3d_model_t *model;
     geometry3d_transform_t transform;
 
     modifier3d_list_t modifiers;
-} geometry3d_instance_t;
+};
 
 bool geometry3d_model_is_valid(
     const geometry3d_model_t *model);

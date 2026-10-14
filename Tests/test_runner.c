@@ -8,6 +8,7 @@ bool test_input_state_suite(void);
 bool test_camera3d_suite(void);
 bool test_camera_controller_suite(void);
 bool test_car_trajectory_suite(void);
+bool test_modifier3d_suite(void);
 
 int main(void)
 {
@@ -69,6 +70,12 @@ int main(void)
     }
     printf("CAR TRAJECTORY TESTS PASSED\n");
 
+    if (!test_modifier3d_suite())
+    {
+        printf("MODIFIER3D TESTS FAILED\n");
+        return 1;
+    }
+    printf("MODIFIER3D TESTS PASSED\n");
 
     printf("ALL TESTS PASSED\n");
 
