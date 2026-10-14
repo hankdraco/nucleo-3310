@@ -341,13 +341,16 @@ bool scene_loader_load(
     scene3d_t *scene,
     camera3d_t *camera,
     projection_perspective_t *projection,
-    car_modifier_context_t *car_context,
+    car_modifier_context_t *car_contexts,
+    size_t car_count,
     car_modifier_environment_t *car_environment)
 {
     if (scene == NULL ||
         camera == NULL ||
         projection == NULL ||
-        car_context == NULL ||
+        car_contexts == NULL ||
+        car_count == 0U ||
+        car_count > SCENE3D_MAX_INSTANCES ||
         car_environment == NULL)
     {
         return false;
@@ -559,11 +562,18 @@ bool scene_loader_load(
     }
 
     /*
-     * 6. One moving car on the central north-south street.
+     * 6. Moving cars. Each instance owns a distinct, caller-managed
+     * modifier context, while all cars share the same environment and RNG.
      */
-    if (!scene_loader_add_car(scene, car_context, car_environment))
+    for (size_t i = 0U; i < car_count; ++i)
     {
-        goto fail;
+        if (!scene_loader_add_car(
+                scene,
+                &car_contexts[i],
+                car_environment))
+        {
+            goto fail;
+        }
     }
 
     /*
