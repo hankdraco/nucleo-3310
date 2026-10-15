@@ -11,6 +11,7 @@ bool test_car_trajectory_suite(void);
 bool test_car_modifier_suite(void);
 bool test_car_spawn_suite(void);
 bool test_modifier3d_suite(void);
+bool test_scene3d_agent_update_suite(void);
 
 int main(void)
 {
@@ -86,6 +87,13 @@ int main(void)
         return 1;
     }
     printf("MODIFIER3D TESTS PASSED\n");
+
+    if (!test_scene3d_agent_update_suite())
+    {
+        printf("SCENE3D AGENT UPDATE TESTS FAILED\n");
+        return 1;
+    }
+    printf("SCENE3D AGENT UPDATE TESTS PASSED\n");
 
     printf("ALL TESTS PASSED\n");
 

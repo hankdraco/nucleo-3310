@@ -63,6 +63,12 @@ typedef bool (*modifier3d_custom_fn)(
     float dt_seconds,
     void *context);
 
+/* Optional first-phase callback, used for agent sensing before movement. */
+typedef bool (*modifier3d_custom_pre_update_fn)(
+    geometry3d_instance_t *instance,
+    float dt_seconds,
+    void *context);
+
 /*
  * User-configurable part of a modifier.
  */
@@ -85,6 +91,7 @@ typedef struct
 
     /* Required only for CUSTOM behavior; context is caller-owned. */
     modifier3d_custom_fn custom_fn;
+    modifier3d_custom_pre_update_fn custom_pre_update_fn;
     void *context;
 } modifier3d_config_t;
 

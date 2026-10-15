@@ -326,6 +326,7 @@ static bool scene_loader_add_car(
         .target = MODIFIER3D_TARGET_ALL,
         .behavior = MODIFIER3D_BEHAVIOR_CUSTOM,
         .custom_fn = car_modifier_update,
+        .custom_pre_update_fn = car_modifier_safety_update,
         .context = car_context
     };
 

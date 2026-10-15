@@ -68,6 +68,7 @@ static bool modifier3d_config_is_valid(
         (unsigned int)config->behavior >
             (unsigned int)MODIFIER3D_BEHAVIOR_ABS_SIN ||
         config->custom_fn != NULL ||
+        config->custom_pre_update_fn != NULL ||
         config->context != NULL)
     {
         return false;
@@ -443,6 +444,40 @@ bool modifier3d_update_instance(
         *target_value = next_value;
         modifier->phase_rad = next_phase;
         modifier->direction = next_direction;
+    }
+
+    return true;
+}
+
+bool modifier3d_pre_update_instance(
+    geometry3d_instance_t *instance,
+    float dt_seconds)
+{
+    if (instance == NULL ||
+        !isfinite(dt_seconds) ||
+        dt_seconds < 0.0f ||
+        instance->modifiers.count > MODIFIER3D_MAX_PER_INSTANCE)
+    {
+        return false;
+    }
+
+    modifier3d_list_t *list = &instance->modifiers;
+
+    for (size_t i = 0U; i < list->count; ++i)
+    {
+        modifier3d_config_t *config = &list->items[i].config;
+
+        if (!modifier3d_config_is_valid(config))
+        {
+            return false;
+        }
+
+        if (config->behavior == MODIFIER3D_BEHAVIOR_CUSTOM &&
+            config->custom_pre_update_fn != NULL &&
+            !config->custom_pre_update_fn(instance, dt_seconds, config->context))
+        {
+            return false;
+        }
     }
 
     return true;

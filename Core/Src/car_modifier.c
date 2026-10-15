@@ -60,7 +60,9 @@ static bool car_modifier_spawn(car_modifier_context_t *c,uint32_t *committed)
      radius = 2.0f * e->street_half_width - e->lane_edge_offset;
  }
  car_modifier_context_t result={0};
+ result.safety_state=CAR_MODIFIER_SAFETY_STATE_CLEAR;
  if(!car_modifier_route_init(&result,&pose,speed,distance,maneuver,radius))return false;
+ result.safety_state=c->safety_state;
  result.environment=e;*c=result;*committed=rng;return true;
 }
 
@@ -75,6 +77,7 @@ bool car_modifier_context_init_spawn(
 
     car_modifier_context_t result = {0};
     result.state = CAR_MODIFIER_STATE_SPAWN;
+    result.safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
     result.environment = environment;
     *context = result;
 
@@ -102,6 +105,7 @@ bool car_modifier_context_init(
     }
 
     result.state = CAR_MODIFIER_STATE_FREE;
+    result.safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
     *context = result;
     return true;
 }
@@ -136,6 +140,7 @@ bool car_modifier_route_init(
     }
 
     result.state = CAR_MODIFIER_STATE_APPROACH_TURN;
+    result.safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
     result.approach_distance_remaining = distance_to_maneuver;
     result.turn_radius = is_turn ? turn_radius : 0.0f;
     result.maneuver = maneuver;
@@ -159,6 +164,13 @@ bool car_modifier_update(
 
     car_modifier_context_t *car_context = context;
     car_modifier_context_t next_context = *car_context;
+    if (next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_CLEAR &&
+        next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_YIELDING &&
+        next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED)
+    {
+        return false;
+    }
+
     float remaining_dt = dt_seconds;
     bool spawned = false;
     uint32_t next_random_state = 0U;
@@ -167,6 +179,12 @@ bool car_modifier_update(
     {
         if (!car_modifier_spawn(&next_context, &next_random_state)) return false;
         spawned = true;
+        remaining_dt = 0.0f;
+    }
+
+    /* Safety supervision has priority and can freeze route progress. */
+    if (next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_CLEAR)
+    {
         remaining_dt = 0.0f;
     }
 
@@ -336,4 +354,23 @@ bool car_modifier_update(
     if(spawned&&next_context.environment)next_context.environment->random_state=next_random_state;
     *car_context = next_context;
     return true;
+}
+
+bool car_modifier_safety_update(
+    geometry3d_instance_t *instance,
+    float dt_seconds,
+    void *context)
+{
+    if (instance == NULL ||
+        context == NULL ||
+        !isfinite(dt_seconds) ||
+        dt_seconds < 0.0f)
+    {
+        return false;
+    }
+
+    const car_modifier_context_t *car_context = context;
+    return car_context->safety_state == CAR_MODIFIER_SAFETY_STATE_CLEAR ||
+           car_context->safety_state == CAR_MODIFIER_SAFETY_STATE_YIELDING ||
+           car_context->safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED;
 }

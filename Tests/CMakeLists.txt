@@ -18,6 +18,9 @@ add_executable(nucleo_3310_tests
     test_car_modifier.c
     test_car_spawn.c
     test_modifier3d.c
+    test_scene3d_agents.c
+    ../Core/Src/scene3d.c
+    ../Core/Src/cube_model.c
     ../Core/Src/modifier3d.c
     ../Core/Src/pcd8544.c
     ../Core/Src/display.c

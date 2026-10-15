@@ -36,7 +36,7 @@ The current scene is a demonstration environment: a ground plane, crossing stree
 | `renderer3d` | Transforming mesh vertices, near-plane clipping, depth rasterization, and visible edge drawing |
 | `rasterizer3d` / `depth_buffer` | Low-level pixel/line/triangle rasterization and depth storage |
 | `car_trajectory` | Portable constant-speed straight motion and circular quarter-turn mathematics |
-| `car_modifier` | Vehicle route state machine, spawn/respawn policy, and synchronization with a renderable instance |
+| `car_modifier` | Vehicle route FSM, safety-supervision FSM scaffold, spawn/respawn policy, and synchronization with a renderable instance |
 | `app` | Top-level update/render scheduling and the display hardware boundary |
 
 The application initializes the scene through `scene_loader_load()`; it does not need to know which models or demo objects are created. The loader owns scene composition, while `app` owns the long-lived runtime state required by the scene.
@@ -163,7 +163,7 @@ During a turn, the trajectory stores the turn's start pose and pivot. It evaluat
 
 ### 6.2 Route modifier and finite-state machine
 
-`car_modifier` is the vehicle's route-level behaviour and its connection to the scene. Each vehicle owns a separate `car_modifier_context_t`, which includes its trajectory, FSM state, approach distance, manoeuvre, turn radius, and a pointer to the shared environment.
+`car_modifier` owns the vehicle's route behaviour and its connection to the scene. Each vehicle has a separate `car_modifier_context_t`, which includes its trajectory, route-FSM state, safety-FSM state, approach distance, manoeuvre, turn radius, and a pointer to the shared environment.
 
 The states are:
 
@@ -188,6 +188,8 @@ SPAWN -> APPROACH_TURN -> TURNING -> DEPARTING
 ```
 
 A straight manoeuvre skips the turning phase and proceeds from approach to departure. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
+
+The context also contains a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`). Its update callback currently validates and preserves that state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over the route FSM by freezing route progress; the state starts as `CLEAR` and remains there until safety behaviour is implemented.
 
 The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
 
@@ -250,7 +252,12 @@ Thus, simulation and input handling are not tied to every LCD refresh. The displ
 
 ### 8.2 Scene update
 
-`scene3d_update()` walks through both the regular instance array and the agent array, calling `modifier3d_update_instance()` for each. Instances without modifiers remain unchanged. Ordinary scalar modifiers update their target transform parameters; custom modifiers invoke their callback, such as `car_modifier_update()` for a vehicle.
+`scene3d_update()` updates regular scene instances once through `modifier3d_update_instance()`. Agents then run in two phases, both restricted to `agent_instances[]`:
+
+1. The pre-update phase invokes optional custom callbacks such as the car safety-FSM scaffold. All agents complete this phase before any agent's route callback runs, so future sensing can read the same pre-movement positions without copying agent state.
+2. The normal update phase advances each agent's modifiers and route FSM.
+
+Instances without modifiers remain unchanged. Ordinary scalar modifiers update their target transform parameters; custom modifiers invoke their callback, such as `car_modifier_update()` for a vehicle. Static instances do not participate in the agent pre-update phase.
 
 This generic traversal means the scene does not need to understand the internals of a car FSM or the mathematical details of a rotation modifier.
 

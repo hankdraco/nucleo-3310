@@ -103,6 +103,7 @@ bool scene3d_update(
      * Every instance owns its modifiers.
      * Modifiers incrementally update the instance's current transform.
      */
+    /* Static scene instances are updated once and never enter agent phases. */
     for (size_t i = 0U; i < scene->instance_count; ++i)
     {
         if (!modifier3d_update_instance(
@@ -113,6 +114,16 @@ bool scene3d_update(
         }
     }
 
+    /* Phase 1: all agents sense the same pre-movement scene state. */
+    for (size_t i = 0U; i < scene->agent_count; ++i)
+    {
+        if (!modifier3d_pre_update_instance(&scene->agent_instances[i], dt_seconds))
+        {
+            return false;
+        }
+    }
+
+    /* Phase 2: advance agent routes and transforms after sensing is complete. */
     for (size_t i = 0U; i < scene->agent_count; ++i)
     {
         if (!modifier3d_update_instance(&scene->agent_instances[i], dt_seconds))

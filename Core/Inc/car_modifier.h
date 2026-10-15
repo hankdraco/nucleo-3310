@@ -20,6 +20,13 @@ typedef enum
     CAR_MODIFIER_STATE_SPAWN
 } car_modifier_state_t;
 
+typedef enum
+{
+    CAR_MODIFIER_SAFETY_STATE_CLEAR = 0,
+    CAR_MODIFIER_SAFETY_STATE_YIELDING,
+    CAR_MODIFIER_SAFETY_STATE_STOPPED
+} car_modifier_safety_state_t;
+
 /*
  * Shared world data for all cars. Each car context holds only a pointer to
  * this object; the random generator state is shared and deterministic.
@@ -50,6 +57,7 @@ typedef struct
 {
     car_trajectory_t trajectory;
     car_modifier_state_t state;
+    car_modifier_safety_state_t safety_state;
     float approach_distance_remaining;
     float turn_radius;
     car_maneuver_t maneuver;
@@ -86,6 +94,12 @@ bool car_modifier_route_init(
  * On failure, neither context nor instance transform is changed.
  */
 bool car_modifier_update(
+    geometry3d_instance_t *instance,
+    float dt_seconds,
+    void *context);
+
+/* First agent-update phase. The safety FSM is currently an inert scaffold. */
+bool car_modifier_safety_update(
     geometry3d_instance_t *instance,
     float dt_seconds,
     void *context);

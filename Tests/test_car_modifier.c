@@ -141,6 +141,37 @@ static bool test_car_modifier_rejects_invalid_initialization(void)
     return true;
 }
 
+static bool test_safety_fsm_starts_clear_and_overrides_route_motion(void)
+{
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 1.0f, .y = 1.0f, .z = 2.0f },
+        .yaw_rad = 0.25f
+    };
+    car_modifier_context_t context;
+    geometry3d_instance_t instance = {0};
+
+    CHECK(car_modifier_route_init(
+        &context, &initial_pose, 2.0f, 5.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    CHECK(context.safety_state == CAR_MODIFIER_SAFETY_STATE_CLEAR);
+
+    context.safety_state = CAR_MODIFIER_SAFETY_STATE_STOPPED;
+    instance.transform.position.x = initial_pose.position.x;
+    instance.transform.position.y = initial_pose.position.y;
+    instance.transform.position.z = initial_pose.position.z;
+    instance.transform.rotation_rad.y = initial_pose.yaw_rad;
+
+    CHECK(car_modifier_safety_update(&instance, 0.5f, &context));
+    CHECK(context.safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED);
+    CHECK(car_modifier_update(&instance, 0.5f, &context));
+    CHECK(test_float_equal(instance.transform.position.x, initial_pose.position.x));
+    CHECK(test_float_equal(instance.transform.position.z, initial_pose.position.z));
+    CHECK(test_float_equal(context.approach_distance_remaining, 5.0f));
+
+    return true;
+}
+
 
 static bool test_car_route_consumes_dt_across_approach_turn_and_departure(void)
 {
@@ -344,6 +375,7 @@ bool test_car_modifier_suite(void)
     CHECK(test_car_modifier_maps_turn_yaw());
     CHECK(test_car_modifier_propagates_trajectory_failure_atomically());
     CHECK(test_car_modifier_rejects_invalid_initialization());
+    CHECK(test_safety_fsm_starts_clear_and_overrides_route_motion());
     CHECK(test_car_route_consumes_dt_across_approach_turn_and_departure());
     CHECK(test_car_route_captures_pivot_relative_to_vehicle());
     CHECK(test_car_route_captures_left_pivot_relative_to_vehicle());

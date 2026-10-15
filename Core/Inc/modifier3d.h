@@ -31,4 +31,9 @@ bool modifier3d_update_instance(
     geometry3d_instance_t *instance,
     float dt_seconds);
 
+/* Run optional custom pre-update callbacks without advancing transforms. */
+bool modifier3d_pre_update_instance(
+    geometry3d_instance_t *instance,
+    float dt_seconds);
+
 #endif /* MODIFIER3D_H */
