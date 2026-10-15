@@ -172,14 +172,14 @@ The states are:
 | `SPAWN` | Retry a candidate route and pose until the spawn footprint is clear |
 | `FREE` | Straight trajectory without route-manoeuvre handling |
 | `APPROACH_TURN` | Travels straight until the selected manoeuvre point |
-| `TRAFFIC_CHECK` | Waits at the intersection entry while another agent is turning |
-| `TURNING` | Executes the captured circular quarter-turn |
+| `TRAFFIC_CHECK` | Waits at the intersection entry while another agent is crossing |
+| `CROSSING` | Occupies the intersection while turning or travelling straight through |
 | `DEPARTING` | Continues along the outgoing street and checks whether the car has left the city |
 
 For the demo's routed cars, the typical progression is:
 
 ```text
-SPAWN -> APPROACH_TURN -> TRAFFIC_CHECK -> TURNING -> DEPARTING
+SPAWN -> APPROACH_TURN -> TRAFFIC_CHECK -> CROSSING -> DEPARTING
                                   |                       |
                                   +-- straight route -----+
                                                           |
@@ -188,9 +188,9 @@ SPAWN -> APPROACH_TURN -> TRAFFIC_CHECK -> TURNING -> DEPARTING
                                                         SPAWN
 ```
 
-A vehicle reaches `TRAFFIC_CHECK` at the manoeuvre point. If another agent is in `TURNING`, it remains at that position and retries on the next update. When the intersection is clear, the FSM immediately begins the selected manoeuvre; straight-through traffic proceeds to `DEPARTING` without using the `TURNING` trajectory phase. The initial traffic rule is intentionally conservative: any other agent in `TURNING` blocks entry, regardless of its path. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
+A vehicle reaches `TRAFFIC_CHECK` at the manoeuvre point. If another agent is in `CROSSING`, it remains at that position and retries on the next update. When the intersection is clear, the FSM immediately begins the selected manoeuvre. Turning vehicles remain in `CROSSING` until the trajectory completes its quarter-turn. Straight-through vehicles remain in `CROSSING` for a distance of `2 * street_half_width`, then enter `DEPARTING`. The initial traffic rule is intentionally conservative: any other agent in `CROSSING` blocks entry, regardless of its path. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
 
-The route FSM contains the `TRAFFIC_CHECK` gate; it currently uses only the other agents' route state (`TURNING`) and does not yet apply right-of-way rules or compare crossing paths. The context also has a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`), which remains an inert scaffold: its update callback validates and preserves the state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over route progress by freezing it.
+The route FSM contains the `TRAFFIC_CHECK` gate; it currently uses only the other agents' route state (`CROSSING`) and does not yet apply right-of-way rules or compare crossing paths. The context also has a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`), which remains an inert scaffold: its update callback validates and preserves the state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over route progress by freezing it.
 
 The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a candidate is blocked, the route state and transform remain unchanged and the shared random state advances so the next frame can try another location. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
 

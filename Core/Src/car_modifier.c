@@ -51,7 +51,7 @@ static bool car_modifier_intersection_is_occupied(
     for (size_t i = 0U; i < *environment->agent_count; ++i)
     {
         if (&environment->agent_instances[i] != self &&
-            environment->agent_contexts[i].state == CAR_MODIFIER_STATE_TURNING)
+            environment->agent_contexts[i].state == CAR_MODIFIER_STATE_CROSSING)
         {
             *occupied = true;
             break;
@@ -64,7 +64,15 @@ static bool car_modifier_begin_maneuver(car_modifier_context_t *context)
 {
     if (context->maneuver == CAR_MANEUVER_STRAIGHT)
     {
-        context->state = CAR_MODIFIER_STATE_DEPARTING;
+        context->crossing_distance_remaining =
+            context->environment != NULL &&
+            isfinite(context->environment->street_half_width) &&
+            context->environment->street_half_width > 0.0f
+                ? 2.0f * context->environment->street_half_width
+                : 0.0f;
+        context->state = context->crossing_distance_remaining > 0.0f
+            ? CAR_MODIFIER_STATE_CROSSING
+            : CAR_MODIFIER_STATE_DEPARTING;
         return true;
     }
 
@@ -87,7 +95,8 @@ static bool car_modifier_begin_maneuver(car_modifier_context_t *context)
     {
         return false;
     }
-    context->state = CAR_MODIFIER_STATE_TURNING;
+    context->crossing_distance_remaining = 0.0f;
+    context->state = CAR_MODIFIER_STATE_CROSSING;
     return true;
 }
 
@@ -495,24 +504,70 @@ bool car_modifier_update(
                 continue;
             }
         }
-        else if (next_context.state == CAR_MODIFIER_STATE_TURNING)
+        else if (next_context.state == CAR_MODIFIER_STATE_CROSSING)
         {
-            /*
-             * car_trajectory_update() clamps the quarter-turn and applies
-             * any leftover time to straight travel in the new direction.
-             */
-            if (!car_trajectory_update(
-                    &next_context.trajectory,
-                    remaining_dt))
+            if (next_context.trajectory.phase == CAR_TRAJECTORY_TURNING)
             {
-                return false;
+                /* The arc's quarter-turn completion clears the crossing state. */
+                if (!car_trajectory_update(
+                        &next_context.trajectory,
+                        remaining_dt))
+                {
+                    return false;
+                }
+
+                remaining_dt = 0.0f;
+                if (next_context.trajectory.phase == CAR_TRAJECTORY_STRAIGHT)
+                {
+                    next_context.state = CAR_MODIFIER_STATE_DEPARTING;
+                }
             }
-
-            remaining_dt = 0.0f;
-
-            if (next_context.trajectory.phase == CAR_TRAJECTORY_STRAIGHT)
+            else
             {
-                next_context.state = CAR_MODIFIER_STATE_DEPARTING;
+                const float crossing_distance =
+                    next_context.crossing_distance_remaining;
+                if (!isfinite(crossing_distance) || crossing_distance < 0.0f)
+                {
+                    return false;
+                }
+
+                if (crossing_distance <= CAR_MODIFIER_TOLERANCE)
+                {
+                    next_context.crossing_distance_remaining = 0.0f;
+                    next_context.state = CAR_MODIFIER_STATE_DEPARTING;
+                    continue;
+                }
+
+                const float time_to_clear = crossing_distance /
+                    next_context.trajectory.speed_units_per_second;
+                if (!isfinite(time_to_clear))
+                {
+                    return false;
+                }
+
+                if (remaining_dt < time_to_clear)
+                {
+                    if (!car_trajectory_update(
+                            &next_context.trajectory, remaining_dt))
+                    {
+                        return false;
+                    }
+                    next_context.crossing_distance_remaining =
+                        crossing_distance -
+                        next_context.trajectory.speed_units_per_second * remaining_dt;
+                    remaining_dt = 0.0f;
+                }
+                else
+                {
+                    if (!car_trajectory_update(
+                            &next_context.trajectory, time_to_clear))
+                    {
+                        return false;
+                    }
+                    next_context.crossing_distance_remaining = 0.0f;
+                    next_context.state = CAR_MODIFIER_STATE_DEPARTING;
+                    remaining_dt -= time_to_clear;
+                }
             }
         }
         else if (next_context.state == CAR_MODIFIER_STATE_SPAWN)

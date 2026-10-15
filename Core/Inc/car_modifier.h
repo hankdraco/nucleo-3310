@@ -17,7 +17,7 @@ typedef enum
     CAR_MODIFIER_STATE_FREE = 0,
     CAR_MODIFIER_STATE_APPROACH_TURN,
     CAR_MODIFIER_STATE_TRAFFIC_CHECK,
-    CAR_MODIFIER_STATE_TURNING,
+    CAR_MODIFIER_STATE_CROSSING,
     CAR_MODIFIER_STATE_DEPARTING,
     CAR_MODIFIER_STATE_SPAWN
 } car_modifier_state_t;
@@ -66,6 +66,8 @@ struct car_modifier_context
     car_modifier_state_t state;
     car_modifier_safety_state_t safety_state;
     float approach_distance_remaining;
+    /* Remaining straight-line distance through the intersection. */
+    float crossing_distance_remaining;
     float turn_radius;
     car_maneuver_t maneuver;
     car_modifier_environment_t *environment;

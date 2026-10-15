@@ -237,7 +237,7 @@ static bool test_car_route_captures_pivot_relative_to_vehicle(void)
     /* Reach the intersection edge and advance a little way into the turn. */
     CHECK(car_modifier_update(&instance, 9.1f, &context));
 
-    CHECK(context.state == CAR_MODIFIER_STATE_TURNING);
+    CHECK(context.state == CAR_MODIFIER_STATE_CROSSING);
     CHECK(test_float_equal(context.trajectory.turn_pivot.x, 12.8f));
     CHECK(test_float_equal(context.trajectory.turn_pivot.y, 1.0f));
     CHECK(test_float_equal(context.trajectory.turn_pivot.z, -12.8f));
@@ -266,7 +266,7 @@ static bool test_car_route_captures_left_pivot_relative_to_vehicle(void)
     /* The pivot is captured at the left intersection corner. */
     CHECK(car_modifier_update(&instance, 9.1f, &context));
 
-    CHECK(context.state == CAR_MODIFIER_STATE_TURNING);
+    CHECK(context.state == CAR_MODIFIER_STATE_CROSSING);
     CHECK(test_float_equal(context.trajectory.turn_pivot.x, -12.8f));
     CHECK(test_float_equal(context.trajectory.turn_pivot.y, 1.0f));
     CHECK(test_float_equal(context.trajectory.turn_pivot.z, -12.8f));
@@ -323,7 +323,7 @@ static bool test_car_route_supports_a_different_cardinal_heading(void)
     /* The car approaches along +X, then captures a pivot on its right (-Z). */
     CHECK(car_modifier_update(&instance, 1.0f, &context));
 
-    CHECK(context.state == CAR_MODIFIER_STATE_TURNING);
+    CHECK(context.state == CAR_MODIFIER_STATE_CROSSING);
     CHECK(test_float_equal(context.trajectory.pose.position.x, -3.0f));
     CHECK(test_float_equal(context.trajectory.pose.position.z, -6.0f));
     CHECK(test_float_equal(context.trajectory.turn_pivot.x, -3.0f));
@@ -390,7 +390,7 @@ static bool test_traffic_check_waits_for_turning_agent_to_clear(void)
         &contexts[0], &initial_pose, 3.0f, 3.0f,
         CAR_MANEUVER_RIGHT, 3.0f));
     contexts[0].environment = &environment;
-    contexts[1].state = CAR_MODIFIER_STATE_TURNING;
+    contexts[1].state = CAR_MODIFIER_STATE_CROSSING;
 
     CHECK(car_modifier_update(&agents[0], 1.0f, &contexts[0]));
     CHECK(contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK);
@@ -405,7 +405,7 @@ static bool test_traffic_check_waits_for_turning_agent_to_clear(void)
 
     contexts[1].state = CAR_MODIFIER_STATE_DEPARTING;
     CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
-    CHECK(contexts[0].state == CAR_MODIFIER_STATE_TURNING);
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
     CHECK(contexts[0].trajectory.phase == CAR_TRAJECTORY_TURNING);
     CHECK(test_float_equal(agents[0].transform.position.z, waiting_z));
     return true;
@@ -434,7 +434,7 @@ static bool test_traffic_check_enters_turn_without_extra_wait_frame(void)
     contexts[1].state = CAR_MODIFIER_STATE_DEPARTING;
 
     CHECK(car_modifier_update(&agents[0], 1.5f, &contexts[0]));
-    CHECK(contexts[0].state == CAR_MODIFIER_STATE_TURNING);
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
     CHECK(contexts[0].trajectory.phase == CAR_TRAJECTORY_TURNING);
     CHECK(agents[0].transform.position.z > -0.1f);
     CHECK(agents[0].transform.rotation_rad.y > 0.0f);
@@ -461,7 +461,7 @@ static bool test_traffic_check_also_blocks_straight_through_route(void)
         &contexts[0], &initial_pose, 3.0f, 3.0f,
         CAR_MANEUVER_STRAIGHT, 0.0f));
     contexts[0].environment = &environment;
-    contexts[1].state = CAR_MODIFIER_STATE_TURNING;
+    contexts[1].state = CAR_MODIFIER_STATE_CROSSING;
 
     CHECK(car_modifier_update(&agents[0], 1.0f, &contexts[0]));
     CHECK(contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK);
@@ -473,6 +473,46 @@ static bool test_traffic_check_also_blocks_straight_through_route(void)
     CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
     CHECK(contexts[0].state == CAR_MODIFIER_STATE_DEPARTING);
     CHECK(test_float_equal(agents[0].transform.position.z, stop_line_z));
+    return true;
+}
+
+static bool test_straight_route_crosses_intersection_before_departing(void)
+{
+    geometry3d_instance_t agents[2] = {0};
+    car_modifier_context_t contexts[2] = {0};
+    size_t agent_count = 2U;
+    car_modifier_environment_t environment =
+    {
+        .street_half_width = 5.0f,
+        .agent_instances = agents,
+        .agent_contexts = contexts,
+        .agent_count = &agent_count
+    };
+    const car_trajectory_pose_t initial_pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = -3.0f },
+        .yaw_rad = 0.0f
+    };
+    CHECK(car_modifier_route_init(
+        &contexts[0], &initial_pose, 2.0f, 3.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    contexts[0].environment = &environment;
+    contexts[1].state = CAR_MODIFIER_STATE_DEPARTING;
+
+    CHECK(car_modifier_update(&agents[0], 1.5f, &contexts[0]));
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
+    CHECK(test_float_equal(contexts[0].crossing_distance_remaining, 10.0f));
+    CHECK(test_float_equal(agents[0].transform.position.z, 0.0f));
+
+    CHECK(car_modifier_update(&agents[0], 2.0f, &contexts[0]));
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
+    CHECK(test_float_equal(contexts[0].crossing_distance_remaining, 6.0f));
+    CHECK(test_float_equal(agents[0].transform.position.z, 4.0f));
+
+    CHECK(car_modifier_update(&agents[0], 3.0f, &contexts[0]));
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_DEPARTING);
+    CHECK(test_float_equal(contexts[0].crossing_distance_remaining, 0.0f));
+    CHECK(test_float_equal(agents[0].transform.position.z, 10.0f));
     return true;
 }
 
@@ -493,6 +533,7 @@ bool test_car_modifier_suite(void)
     CHECK(test_traffic_check_waits_for_turning_agent_to_clear());
     CHECK(test_traffic_check_enters_turn_without_extra_wait_frame());
     CHECK(test_traffic_check_also_blocks_straight_through_route());
+    CHECK(test_straight_route_crosses_intersection_before_departing());
 
     return true;
 }
