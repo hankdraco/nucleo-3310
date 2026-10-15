@@ -289,7 +289,7 @@ static bool scene_loader_add_city_buildings(scene3d_t *scene)
  * Add one car instance to the central north-south street.
  *
  * The behavior context belongs to the caller (app_t), not this function's
- * stack. scene3d_add_instance() copies the instance and its context pointer,
+ * stack. scene3d_add_agent_instance() copies the instance and its context pointer,
  * so the caller-owned context must remain alive while the scene is updated.
  */
 static bool scene_loader_add_car(
@@ -334,7 +334,7 @@ static bool scene_loader_add_car(
         return false;
     }
 
-    return scene3d_add_instance(scene, &car);
+    return scene3d_add_agent_instance(scene, &car);
 }
 
 bool scene_loader_load(
@@ -350,7 +350,7 @@ bool scene_loader_load(
         projection == NULL ||
         car_contexts == NULL ||
         car_count == 0U ||
-        car_count > SCENE3D_MAX_INSTANCES ||
+        car_count > SCENE3D_MAX_AGENTS ||
         car_environment == NULL)
     {
         return false;

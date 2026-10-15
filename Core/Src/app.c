@@ -126,7 +126,9 @@ bool app_run(
         input == NULL ||
         !isfinite(dt_seconds) ||
         dt_seconds < 0.0f ||
-        app->scene.instance_count > SCENE3D_MAX_INSTANCES)
+        app->scene.instance_count > SCENE3D_MAX_INSTANCES ||
+        app->scene.agent_count > SCENE3D_MAX_AGENTS ||
+        app->scene.instance_count + app->scene.agent_count > SCENE3D_MAX_INSTANCES)
     {
         return false;
     }

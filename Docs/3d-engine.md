@@ -4,7 +4,7 @@ This document describes the 3D engine as it is implemented in the `car-agents-td
 
 The engine is a compact, hand-written C implementation designed for a resource-constrained STM32 and an 84 × 48 monochrome display. It deliberately uses fixed-capacity data structures and avoids dynamic allocation in the scene and modifier paths.
 
-> **Implementation status:** this document distinguishes existing behaviour from planned directions. In particular, the current scene stores all instances in one array. Static scenery and vehicles are different *logical categories*, but separate storage lists for them have not yet been implemented.
+> **Implementation status:** this document distinguishes existing behaviour from planned directions. Static scene instances and dynamic agents are stored in separate fixed-capacity arrays. The agent list currently contains the cars.
 
 ## 1. Design goals
 
@@ -82,7 +82,7 @@ These bounds make memory use predictable and avoid allocation/free failure modes
 
 ### 4.1 The scene owns instances by value
 
-A `scene3d_t` currently contains one fixed array of `geometry3d_instance_t` objects, a parallel array of parent indices, and an instance count. `scene3d_add_instance()` copies the supplied instance into this storage. The mesh itself is not copied; the instance retains its pointer to the shared model.
+A `scene3d_t` contains a fixed array of static scene instances (`instances[]`) with a parallel array of parent indices, plus a separate fixed array of dynamic agents (`agent_instances[]`). `scene3d_add_instance()` copies a regular instance into the first array; `scene3d_add_agent_instance()` copies an agent into the second. The mesh itself is not copied; each instance retains its pointer to the shared model. The combined number of static instances and agents is limited to `SCENE3D_MAX_INSTANCES`; the agent array has its own smaller `SCENE3D_MAX_AGENTS` bound to keep memory use predictable.
 
 A parent index of `SCENE3D_NO_PARENT_INDEX` marks a root instance. The scene API allows a child to be attached to a parent or detached again. It rejects invalid indices, self-parenting, and relationships that would introduce a hierarchy cycle.
 
@@ -204,7 +204,7 @@ All vehicles point to the same environment. Each vehicle nevertheless has its ow
 
 The random generator is shared so that each spawn advances one common deterministic sequence rather than maintaining a separate random stream per vehicle. The environment's lifetime must outlast every vehicle context that references it.
 
-The current application configures five cars through `APP_CAR_COUNT`. The loader loops over the requested count and initializes a distinct context and scene instance for each car. The count must fit the application's context array and the scene's overall instance capacity.
+The current application configures five cars through `APP_CAR_COUNT`. The loader loops over the requested count and initializes a distinct context and agent instance for each car. The count must fit the application's context array and the scene's overall instance capacity.
 
 ### 6.4 Transactional update intent
 
@@ -223,18 +223,18 @@ The demo scene contains several logical categories:
 
 Static buildings have no modifiers. The centerpiece and its children use scalar rotation modifiers. Each car uses a custom modifier linked to its own route context.
 
-**These categories are not currently stored in separate arrays.** All of them occupy the same `scene3d_t.instances[]` array and are traversed by the generic update and render passes. The distinction currently comes from how each instance is configured, not from a separate storage container.
+Static scenery and non-car animations occupy `scene3d_t.instances[]`. Cars occupy `scene3d_t.agent_instances[]`, making the dynamic-agent collection directly available for simulation queries. Both collections are updated by `scene3d_update()` and included in both render passes. Parent-child transforms currently apply to regular scene instances; agents are root instances with their own world transforms.
 
 ### 7.2 Why separate static and interactive lists may be useful later
 
-A future simulation layer may benefit from explicit collections such as:
+The separate agent collection supports simulation queries such as:
 
 - **static world objects**, such as buildings and road geometry;
 - **interactive agents**, such as cars that can sense and react to other cars.
 
 Vehicle awareness should not need to scan every object that happens to be rendered. For example, when a car searches for nearby traffic, buildings and ground planes are generally not candidate *vehicles*. A dedicated agent collection would make that query straightforward and communicate the intended interaction domain in the data model.
 
-This separation is an architectural direction, not a feature already implemented by the current scene. It should be introduced when simulation queries need it, with a clear ownership and update policy so that rendering can still see every renderable instance.
+Vehicle awareness can scan the agent list without considering ground, roads, or buildings, while rendering still sees every renderable instance in the scene. The current five-car demonstration can use a direct scan; a spatial index may become useful if the number of agents grows significantly.
 
 Separate lists alone will not solve every scaling problem. If the number of agents grows significantly, a spatial index (for example, a uniform grid) or another broad-phase query structure may be needed to avoid checking every vehicle against every other vehicle. That optimization is not required for the current five-car demonstration.
 
@@ -250,7 +250,7 @@ Thus, simulation and input handling are not tied to every LCD refresh. The displ
 
 ### 8.2 Scene update
 
-`scene3d_update()` walks through the scene's instances and calls `modifier3d_update_instance()` for each. Instances without modifiers remain unchanged. Ordinary scalar modifiers update their target transform parameters; custom modifiers invoke their callback, such as `car_modifier_update()` for a vehicle.
+`scene3d_update()` walks through both the regular instance array and the agent array, calling `modifier3d_update_instance()` for each. Instances without modifiers remain unchanged. Ordinary scalar modifiers update their target transform parameters; custom modifiers invoke their callback, such as `car_modifier_update()` for a vehicle.
 
 This generic traversal means the scene does not need to understand the internals of a car FSM or the mathematical details of a rotation modifier.
 
@@ -258,8 +258,8 @@ This generic traversal means the scene does not need to understand the internals
 
 `scene3d_render()` clears the depth buffer and renders in two passes:
 
-1. **Depth/rasterization pass:** for each instance, build its world transform and rasterize its triangles into the depth buffer.
-2. **Edge pass:** for each instance, build the same world transform and draw its edges, using the depth buffer to suppress edges hidden behind nearer surfaces.
+1. **Depth/rasterization pass:** for each regular instance and agent, build its world transform and rasterize its triangles into the depth buffer.
+2. **Edge pass:** for each regular instance and agent, build the same world transform and draw its edges, using the depth buffer to suppress edges hidden behind nearer surfaces.
 
 For every instance, the renderer combines the world transform with the camera view matrix, transforms the model vertices into camera space, clips line segments crossing the near plane, projects visible points, and clips projected lines to the 84 × 48 canvas. Canvas clipping uses the Liang–Barsky line-clipping algorithm.
 
@@ -287,7 +287,7 @@ The near plane prevents points too close to or behind the camera from being proj
 3. Add the static buildings around the central streets.
 4. Add the central cube assembly and its three-axis rotation modifiers.
 5. Add six child cubes, attach them to the centerpiece, and configure their own rotation modifiers.
-6. Add the configured number of cars, each with its own persistent context and custom modifier.
+6. Add the configured number of cars to the agent list, each with its own persistent context and custom modifier.
 7. Configure the initial camera view and perspective projection.
 
 The loader fails if any part of the scene cannot be configured. On failure it resets the scene and camera and clears the projection structure, rather than returning a partially loaded scene as a success.
@@ -296,9 +296,9 @@ The loader fails if any part of the scene cannot be configured. On failure it re
 
 The current design intentionally keeps the simulation small and explicit. Important constraints to keep in mind:
 
-- Scene instances, modifiers, and model vertex scratch storage have fixed limits.
-- The scene currently uses a single instance array; separate static and agent collections are not yet present.
-- Cars are independent agents, but collision avoidance and mutual awareness are not implemented by this document's described architecture.
+- Scene instances, agents, modifiers, and model vertex scratch storage have fixed limits.
+- The scene has separate static-instance and agent arrays, with a shared total capacity. Agent instances are roots and do not currently participate in parent-child hierarchies.
+- Cars are independent agents, but collision avoidance and mutual awareness are not implemented yet.
 - There is no broad-phase spatial index for agent queries.
 - Vehicle visuals are placeholder cubes, independent of the trajectory implementation.
 - The depth/edge pipeline is designed for a tiny monochrome display, not a general-purpose GPU.
