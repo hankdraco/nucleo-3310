@@ -10,7 +10,7 @@
 #include "car_modifier.h"
 #include "input_types.h"
 
-#define APP_CAR_COUNT 5U
+#define APP_CAR_COUNT 7U
 
 typedef struct
 {
