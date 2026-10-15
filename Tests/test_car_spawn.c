@@ -1,4 +1,5 @@
 #include "car_modifier.h"
+#include "car_footprint.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -141,10 +142,67 @@ static bool test_car_respawns_immediately_without_consuming_leftover_dt(void)
     return true;
 }
 
+static bool test_blocked_spawn_retries_without_moving_car(void)
+{
+    car_modifier_environment_t probe_environment = make_test_environment(0x31415926U);
+    car_modifier_context_t probe_context = {0};
+    geometry3d_instance_t probe_instance = {0};
+    CHECK(car_modifier_context_init_spawn(&probe_context, &probe_environment));
+    CHECK(car_modifier_update(&probe_instance, 0.0f, &probe_context));
+
+    geometry3d_instance_t other_instance =
+    {
+        .transform =
+        {
+            .position = { probe_instance.transform.position.x,
+                          probe_instance.transform.position.y,
+                          probe_instance.transform.position.z },
+            .rotation_rad = { .y = probe_instance.transform.rotation_rad.y },
+            .scale = { CAR_FOOTPRINT_HALF_WIDTH_UNITS, 1.0f,
+                       CAR_FOOTPRINT_HALF_LENGTH_UNITS }
+        }
+    };
+    car_modifier_context_t other_context = { .state = CAR_MODIFIER_STATE_APPROACH_TURN };
+    geometry3d_instance_t agents[] = { other_instance };
+    car_modifier_context_t contexts[] = { other_context };
+    size_t agent_count = 1U;
+    car_modifier_environment_t environment = make_test_environment(0x31415926U);
+    environment.agent_instances = agents;
+    environment.agent_contexts = contexts;
+    environment.agent_count = &agent_count;
+
+    car_modifier_context_t waiting_context = {0};
+    geometry3d_instance_t waiting_instance =
+    {
+        .transform.position = { .x = -50.0f, .y = 3.0f, .z = 75.0f },
+        .transform.rotation_rad = { .y = 0.25f }
+    };
+    CHECK(car_modifier_context_init_spawn(&waiting_context, &environment));
+    const uint32_t initial_random_state = environment.random_state;
+
+    CHECK(car_modifier_update(&waiting_instance, 1.0f, &waiting_context));
+    CHECK(waiting_context.state == CAR_MODIFIER_STATE_SPAWN);
+    CHECK(waiting_instance.transform.position.x == -50.0f);
+    CHECK(waiting_instance.transform.position.z == 75.0f);
+    CHECK(waiting_instance.transform.position.y == 3.0f);
+    CHECK(waiting_instance.transform.rotation_rad.y == 0.25f);
+    CHECK(environment.random_state != initial_random_state);
+
+    /* Waiting cars do not reserve their stale world position. */
+    contexts[0].state = CAR_MODIFIER_STATE_SPAWN;
+    environment.random_state = initial_random_state;
+    CHECK(car_modifier_update(&waiting_instance, 0.0f, &waiting_context));
+    CHECK(waiting_context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+    CHECK(waiting_instance.transform.position.x == probe_instance.transform.position.x);
+    CHECK(waiting_instance.transform.position.z == probe_instance.transform.position.z);
+    return true;
+}
+
 bool test_car_spawn_suite(void)
 {
     CHECK(test_car_spawn_state_is_processed_with_zero_dt());
     CHECK(test_car_respawns_immediately_without_consuming_leftover_dt());
+    CHECK(test_blocked_spawn_retries_without_moving_car());
 
     return true;
 }

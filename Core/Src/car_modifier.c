@@ -1,4 +1,6 @@
 #include "car_modifier.h"
+#include "car_footprint.h"
+#include "scene3d.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -22,9 +24,81 @@ static float car_modifier_random_range(uint32_t *s,float lo,float hi)
 {
  return lo+(hi-lo)*(float)(car_modifier_random_next(s)>>8U)/16777215.0f;
 }
-static bool car_modifier_spawn(car_modifier_context_t *c,uint32_t *committed)
+typedef enum
 {
- if(!c||!c->environment||!committed)return false;
+    CAR_MODIFIER_SPAWN_ERROR = 0,
+    CAR_MODIFIER_SPAWN_BLOCKED,
+    CAR_MODIFIER_SPAWN_SUCCESS
+} car_modifier_spawn_result_t;
+
+static bool car_modifier_spawn_location_is_clear(
+    const geometry3d_instance_t *self,
+    const car_modifier_context_t *context,
+    const car_trajectory_pose_t *candidate)
+{
+    const car_modifier_environment_t *environment = context->environment;
+    if (environment->agent_instances == NULL || environment->agent_contexts == NULL ||
+        environment->agent_count == NULL)
+    {
+        return environment->agent_instances == NULL &&
+               environment->agent_contexts == NULL &&
+               environment->agent_count == NULL;
+    }
+
+    if (*environment->agent_count > SCENE3D_MAX_AGENTS)
+    {
+        return false;
+    }
+
+    const car_footprint_t candidate_footprint =
+    {
+        .center_x = candidate->position.x,
+        .center_z = candidate->position.z,
+        .yaw_rad = candidate->yaw_rad,
+        .half_width = CAR_FOOTPRINT_HALF_WIDTH_UNITS,
+        .half_length = CAR_FOOTPRINT_HALF_LENGTH_UNITS
+    };
+
+    for (size_t i = 0U; i < *environment->agent_count; ++i)
+    {
+        const geometry3d_instance_t *other = &environment->agent_instances[i];
+        if (other == self || environment->agent_contexts[i].state == CAR_MODIFIER_STATE_SPAWN)
+        {
+            continue;
+        }
+
+        const car_footprint_t other_footprint =
+        {
+            .center_x = other->transform.position.x,
+            .center_z = other->transform.position.z,
+            .yaw_rad = other->transform.rotation_rad.y,
+            .half_width = fabsf(other->transform.scale.x),
+            .half_length = fabsf(other->transform.scale.z)
+        };
+        if (!isfinite(other_footprint.center_x) || !isfinite(other_footprint.center_z) ||
+            !isfinite(other_footprint.yaw_rad) || other_footprint.half_width <= 0.0f ||
+            other_footprint.half_length <= 0.0f)
+        {
+            return false;
+        }
+        if (car_footprints_overlap(
+                &candidate_footprint,
+                &other_footprint,
+                CAR_FOOTPRINT_SPAWN_CLEARANCE_UNITS))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static car_modifier_spawn_result_t car_modifier_spawn(
+    geometry3d_instance_t *instance,
+    car_modifier_context_t *c,
+    uint32_t *committed)
+{
+ if(!instance||!c||!c->environment||!committed)return CAR_MODIFIER_SPAWN_ERROR;
  car_modifier_environment_t *e=c->environment;
  if(!isfinite(e->city_half_extent_x)||!isfinite(e->city_half_extent_z)||
  !isfinite(e->street_half_width)||!isfinite(e->lane_edge_offset)||
@@ -32,7 +106,17 @@ static bool car_modifier_spawn(car_modifier_context_t *c,uint32_t *committed)
  e->city_half_extent_x<=e->street_half_width||e->city_half_extent_z<=e->street_half_width||
  e->street_half_width<=0.0f||e->lane_edge_offset<0.0f||
  e->minimum_speed_units_per_second<=0.0f||
- e->maximum_speed_units_per_second<e->minimum_speed_units_per_second)return false;
+ e->maximum_speed_units_per_second<e->minimum_speed_units_per_second)return CAR_MODIFIER_SPAWN_ERROR;
+ const bool has_agent_registry = e->agent_instances != NULL &&
+                                 e->agent_contexts != NULL &&
+                                 e->agent_count != NULL;
+ const bool has_any_agent_registry = e->agent_instances != NULL ||
+                                     e->agent_contexts != NULL ||
+                                     e->agent_count != NULL;
+ if (has_any_agent_registry && !has_agent_registry)
+ {
+     return CAR_MODIFIER_SPAWN_ERROR;
+ }
  uint32_t rng=e->random_state,entry=car_modifier_random_next(&rng)%4U;
  car_maneuver_t maneuver=(car_maneuver_t)(car_modifier_random_next(&rng)%3U);
  float speed=car_modifier_random_range(&rng,e->minimum_speed_units_per_second,e->maximum_speed_units_per_second);
@@ -61,9 +145,14 @@ static bool car_modifier_spawn(car_modifier_context_t *c,uint32_t *committed)
  }
  car_modifier_context_t result={0};
  result.safety_state=CAR_MODIFIER_SAFETY_STATE_CLEAR;
- if(!car_modifier_route_init(&result,&pose,speed,distance,maneuver,radius))return false;
+ if(!car_modifier_route_init(&result,&pose,speed,distance,maneuver,radius))return CAR_MODIFIER_SPAWN_ERROR;
+ *committed = rng;
+ if (!car_modifier_spawn_location_is_clear(instance, c, &pose))
+ {
+     return CAR_MODIFIER_SPAWN_BLOCKED;
+ }
  result.safety_state=c->safety_state;
- result.environment=e;*c=result;*committed=rng;return true;
+ result.environment=e;*c=result;return CAR_MODIFIER_SPAWN_SUCCESS;
 }
 
 bool car_modifier_context_init_spawn(
@@ -174,10 +263,20 @@ bool car_modifier_update(
     float remaining_dt = dt_seconds;
     bool spawned = false;
     uint32_t next_random_state = 0U;
-    /* SPAWN is a one-shot transition, independent of elapsed time. */
+    /* A blocked SPAWN consumes its random attempt, then retries next update. */
     if (next_context.state == CAR_MODIFIER_STATE_SPAWN)
     {
-        if (!car_modifier_spawn(&next_context, &next_random_state)) return false;
+        const car_modifier_spawn_result_t spawn_result =
+            car_modifier_spawn(instance, &next_context, &next_random_state);
+        if (spawn_result == CAR_MODIFIER_SPAWN_ERROR) return false;
+        if (spawn_result == CAR_MODIFIER_SPAWN_BLOCKED)
+        {
+            if (next_context.environment != NULL)
+            {
+                next_context.environment->random_state = next_random_state;
+            }
+            return true;
+        }
         spawned = true;
         remaining_dt = 0.0f;
     }
@@ -206,8 +305,13 @@ bool car_modifier_update(
                 !car_modifier_inside_city(&next_context.trajectory.pose,next_context.environment))
             {
                 next_context.state=CAR_MODIFIER_STATE_SPAWN;
-                if(!car_modifier_spawn(&next_context,&next_random_state))return false;
-                spawned=true;remaining_dt=0.0f;break;
+                const car_modifier_spawn_result_t spawn_result =
+                    car_modifier_spawn(instance, &next_context, &next_random_state);
+                if (spawn_result == CAR_MODIFIER_SPAWN_ERROR) return false;
+                if (spawn_result == CAR_MODIFIER_SPAWN_SUCCESS) spawned = true;
+                else if (next_context.environment != NULL)
+                    next_context.environment->random_state = next_random_state;
+                remaining_dt=0.0f;break;
             }
             if(!car_trajectory_update(&next_context.trajectory,remaining_dt))return false;
             remaining_dt=0.0f;
@@ -215,8 +319,12 @@ bool car_modifier_update(
                 !car_modifier_inside_city(&next_context.trajectory.pose,next_context.environment))
             {
                 next_context.state=CAR_MODIFIER_STATE_SPAWN;
-                if(!car_modifier_spawn(&next_context,&next_random_state))return false;
-                spawned=true;
+                const car_modifier_spawn_result_t spawn_result =
+                    car_modifier_spawn(instance, &next_context, &next_random_state);
+                if (spawn_result == CAR_MODIFIER_SPAWN_ERROR) return false;
+                if (spawn_result == CAR_MODIFIER_SPAWN_SUCCESS) spawned = true;
+                else if (next_context.environment != NULL)
+                    next_context.environment->random_state = next_random_state;
             }
         }
         else if (next_context.state == CAR_MODIFIER_STATE_APPROACH_TURN)
@@ -327,8 +435,13 @@ bool car_modifier_update(
         }
         else if (next_context.state == CAR_MODIFIER_STATE_SPAWN)
         {
-            if (!car_modifier_spawn(&next_context,&next_random_state)) return false;
-            spawned=true;remaining_dt=0.0f;
+            const car_modifier_spawn_result_t spawn_result =
+                car_modifier_spawn(instance, &next_context, &next_random_state);
+            if (spawn_result == CAR_MODIFIER_SPAWN_ERROR) return false;
+            if (spawn_result == CAR_MODIFIER_SPAWN_SUCCESS) spawned = true;
+            else if (next_context.environment != NULL)
+                next_context.environment->random_state = next_random_state;
+            remaining_dt=0.0f;
         }
         else
         {

@@ -17,6 +17,7 @@ add_executable(nucleo_3310_tests
     test_car_trajectory.c
     test_car_modifier.c
     test_car_spawn.c
+    test_car_footprint.c
     test_modifier3d.c
     test_scene3d_agents.c
     ../Core/Src/scene3d.c
@@ -33,6 +34,7 @@ add_executable(nucleo_3310_tests
     ../Core/Src/matrix4.c
     ../Core/Src/car_trajectory.c
     ../Core/Src/car_modifier.c
+    ../Core/Src/car_footprint.c
 )
 
 target_include_directories(nucleo_3310_tests PRIVATE

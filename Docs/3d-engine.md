@@ -169,7 +169,7 @@ The states are:
 
 | State | Purpose |
 | --- | --- |
-| `SPAWN` | One-shot initialization of a new route and pose |
+| `SPAWN` | Retry a candidate route and pose until the spawn footprint is clear |
 | `FREE` | Straight trajectory without route-manoeuvre handling |
 | `APPROACH_TURN` | Travels straight until the selected manoeuvre point |
 | `TURNING` | Executes the captured circular quarter-turn |
@@ -191,7 +191,7 @@ A straight manoeuvre skips the turning phase and proceeds from approach to depar
 
 The context also contains a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`). Its update callback currently validates and preserves that state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over the route FSM by freezing route progress; the state starts as `CLEAR` and remains there until safety behaviour is implemented.
 
-The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
+The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a candidate is blocked, the route state and transform remain unchanged and the shared random state advances so the next frame can try another location. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
 
 ### 6.3 Shared environment, independent car contexts
 
@@ -226,6 +226,12 @@ The demo scene contains several logical categories:
 Static buildings have no modifiers. The centerpiece and its children use scalar rotation modifiers. Each car uses a custom modifier linked to its own route context.
 
 Static scenery and non-car animations occupy `scene3d_t.instances[]`. Cars occupy `scene3d_t.agent_instances[]`, making the dynamic-agent collection directly available for simulation queries. Both collections are updated by `scene3d_update()` and included in both render passes. Parent-child transforms currently apply to regular scene instances; agents are root instances with their own world transforms.
+
+### Car spawn and footprint checks
+
+The route FSM's `SPAWN` state can persist across multiple updates. Each update samples a new spawn candidate. If its oriented XZ footprint overlaps an active car, the attempt consumes its random values, leaves the car's route state and transform unchanged, and retries on a later update. A successful attempt initializes the route and places the car immediately, but does not consume remaining frame time. Cars are processed sequentially, so a car spawned earlier in the agent list is visible to later spawn attempts in the same scene update.
+
+The shared car environment points at the live agent instance array, its parallel car-context array, and the live agent count. Spawn checks skip the current car and agents whose route state is `SPAWN`; a waiting car's previous transform therefore does not reserve a spawn location. `car_footprint` provides the geometry-only oriented rectangle intersection test (SAT) in the XZ plane. Footprint dimensions match the current cube proxy, with a small spawn clearance. This separates world geometry from route lifecycle decisions, which remain in `car_modifier`.
 
 ### 7.2 Why separate static and interactive lists may be useful later
 

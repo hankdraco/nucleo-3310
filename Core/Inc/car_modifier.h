@@ -2,6 +2,7 @@
 #define CAR_MODIFIER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "car_trajectory.h"
@@ -27,6 +28,8 @@ typedef enum
     CAR_MODIFIER_SAFETY_STATE_STOPPED
 } car_modifier_safety_state_t;
 
+typedef struct car_modifier_context car_modifier_context_t;
+
 /*
  * Shared world data for all cars. Each car context holds only a pointer to
  * this object; the random generator state is shared and deterministic.
@@ -40,6 +43,9 @@ typedef struct
     float minimum_speed_units_per_second;
     float maximum_speed_units_per_second;
     uint32_t random_state;
+    geometry3d_instance_t *agent_instances;
+    car_modifier_context_t *agent_contexts;
+    size_t *agent_count;
 } car_modifier_environment_t;
 
 /*
@@ -53,7 +59,7 @@ typedef enum
     CAR_MANEUVER_RIGHT
 } car_maneuver_t;
 
-typedef struct
+struct car_modifier_context
 {
     car_trajectory_t trajectory;
     car_modifier_state_t state;
@@ -62,9 +68,9 @@ typedef struct
     float turn_radius;
     car_maneuver_t maneuver;
     car_modifier_environment_t *environment;
-} car_modifier_context_t;
+};
 
-/* Prepare a context for its first one-shot SPAWN update. */
+/* Prepare a context for its first retryable SPAWN update. */
 bool car_modifier_context_init_spawn(
     car_modifier_context_t *context,
     car_modifier_environment_t *environment);

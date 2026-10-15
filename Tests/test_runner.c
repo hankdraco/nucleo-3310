@@ -10,6 +10,7 @@ bool test_camera_controller_suite(void);
 bool test_car_trajectory_suite(void);
 bool test_car_modifier_suite(void);
 bool test_car_spawn_suite(void);
+bool test_car_footprint_suite(void);
 bool test_modifier3d_suite(void);
 bool test_scene3d_agent_update_suite(void);
 
@@ -80,6 +81,13 @@ int main(void)
         return 1;
     }
     printf("CAR SPAWN TESTS PASSED\n");
+
+    if (!test_car_footprint_suite())
+    {
+        printf("CAR FOOTPRINT TESTS FAILED\n");
+        return 1;
+    }
+    printf("CAR FOOTPRINT TESTS PASSED\n");
 
     if (!test_modifier3d_suite())
     {

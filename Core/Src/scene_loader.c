@@ -3,6 +3,7 @@
 #include "scene_loader.h"
 #include "cube_model.h"
 #include "car_modifier.h"
+#include "car_footprint.h"
 #include "display.h"
 #include "modifier3d.h"
 #include "city_models.h"
@@ -315,7 +316,12 @@ static bool scene_loader_add_car(
         {
             .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
             .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
-            .scale = { .x = 1.25f, .y = 1.00f, .z = 2.25f }
+            .scale =
+            {
+                .x = CAR_FOOTPRINT_HALF_WIDTH_UNITS,
+                .y = 1.00f,
+                .z = CAR_FOOTPRINT_HALF_LENGTH_UNITS
+            }
         }
     };
 
@@ -358,6 +364,10 @@ bool scene_loader_load(
     }
 
     scene3d_init(scene);
+
+    car_environment->agent_instances = scene->agent_instances;
+    car_environment->agent_contexts = car_contexts;
+    car_environment->agent_count = &scene->agent_count;
 
     if (!camera3d_init(camera))
     {

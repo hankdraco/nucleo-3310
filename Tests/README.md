@@ -68,6 +68,7 @@ CAMERA CONTROLLER TESTS PASSED
 CAR TRAJECTORY TESTS PASSED
 CAR MODIFIER TESTS PASSED
 CAR SPAWN TESTS PASSED
+CAR FOOTPRINT TESTS PASSED
 MODIFIER3D TESTS PASSED
 SCENE3D AGENT UPDATE TESTS PASSED
 ALL TESTS PASSED
@@ -97,7 +98,7 @@ Tests/test_runner.c
   ├── camera_controller_tests.c
   │     └── Core/Src/camera_controller.c
   │           └── camera3d.c / geometry3d.c / matrix4.c
-  ├── test_car_trajectory.c / test_car_modifier.c / test_car_spawn.c
+  ├── test_car_trajectory.c / test_car_modifier.c / test_car_spawn.c / test_car_footprint.c
   │     └── Core/Src/car_trajectory.c / car_modifier.c
   ├── test_modifier3d.c
   │     └── Core/Src/modifier3d.c
