@@ -163,7 +163,7 @@ During a turn, the trajectory stores the turn's start pose and pivot. It evaluat
 
 ### 6.2 Route modifier and finite-state machine
 
-`car_modifier` owns the vehicle's route behaviour and its connection to the scene. Each vehicle has a separate `car_modifier_context_t`, which includes its trajectory, route-FSM state, safety-FSM state, approach distance, selected manoeuvre, original approach heading, turn radius, and a pointer to the shared environment.
+`car_modifier` owns the vehicle's route behaviour and its connection to the scene. Each vehicle has a separate `car_modifier_context_t`, which includes its trajectory, route-FSM state, safety-FSM state, cruise and target speeds, approach distance, selected manoeuvre, original approach heading, turn radius, and a pointer to the shared environment.
 
 The states are:
 
@@ -205,7 +205,7 @@ The relative approach is derived from the original incoming heading, stored in `
 | Straight | Right | C | C | C |
 | Any | Same approach | — | — | — |
 
-The route FSM contains the `TRAFFIC_CHECK` gate. It applies the path-conflict table above; formal right-of-way priority and conflict checks against agents that are only approaching remain out of scope. The context also has a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`), which remains an inert scaffold: its update callback validates and preserves the state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over route progress by freezing it.
+The route FSM contains the `TRAFFIC_CHECK` gate. It applies the path-conflict table above; formal right-of-way priority and conflict checks against agents that are only approaching remain out of scope. A separate safety-supervision FSM (`CLEAR`, `FOLLOWING`, and `STOPPED`, with `YIELDING` reserved) checks for the nearest vehicle ahead within 40 units that is travelling in nearly the same direction and overlaps the current lane. It uses the cars' live transforms and projected rectangular footprints; agents in `SPAWN` and crossing traffic are ignored. A vehicle waiting in `TRAFFIC_CHECK` counts as stopped. The controller aims to preserve a 1.5-unit standstill gap and a 1.5-second time headway, limits acceleration to 4 units/s² and braking to 14 units/s², and caps its speed at its route's cruise speed. Its target speed accounts for both the following gap and the braking distance; `FOLLOWING` brakes or accelerates while route progress continues, and `STOPPED` is entered once the vehicle has halted behind a lead. When the lane ahead clears, the car accelerates back toward cruise speed. The pre-update phase only computes the target; movement and speed changes happen later in the normal agent update phase.
 
 The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a candidate is blocked, the route state and transform remain unchanged and the shared random state advances so the next frame can try another location. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
 
@@ -276,7 +276,7 @@ Thus, simulation and input handling are not tied to every LCD refresh. The displ
 
 `scene3d_update()` updates regular scene instances once through `modifier3d_update_instance()`. Agents then run in two phases, both restricted to `agent_instances[]`:
 
-1. The pre-update phase invokes optional custom callbacks such as the car safety-FSM scaffold. All agents complete this phase before any agent's route callback runs, so future sensing can read the same pre-movement positions without copying agent state.
+1. The pre-update phase invokes optional custom callbacks such as the car safety controller. All agents complete this phase before any agent's route callback runs, so sensing reads a consistent set of pre-movement positions without copying agent state.
 2. The normal update phase advances each agent's modifiers and route FSM.
 
 Instances without modifiers remain unchanged. Ordinary scalar modifiers update their target transform parameters; custom modifiers invoke their callback, such as `car_modifier_update()` for a vehicle. Static instances do not participate in the agent pre-update phase.

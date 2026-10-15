@@ -7,6 +7,12 @@
 
 #define CAR_MODIFIER_TOLERANCE (0.0001f)
 #define CAR_MODIFIER_PI_RAD (3.14159265358979323846f)
+#define CAR_SAFETY_SENSOR_RANGE_UNITS (40.0f)
+#define CAR_SAFETY_STANDSTILL_GAP_UNITS (1.5f)
+#define CAR_SAFETY_TIME_HEADWAY_SECONDS (1.5f)
+#define CAR_SAFETY_MAX_ACCELERATION_UNITS_PER_SECOND_SQUARED (4.0f)
+#define CAR_SAFETY_MAX_DECELERATION_UNITS_PER_SECOND_SQUARED (14.0f)
+#define CAR_SAFETY_LANE_OVERLAP_TOLERANCE_UNITS (0.25f)
 static bool car_modifier_inside_city(const car_trajectory_pose_t *p,const car_modifier_environment_t *e)
 {
  return p&&e&&isfinite(p->position.x)&&isfinite(p->position.z)&&
@@ -164,6 +170,81 @@ static bool car_modifier_has_conflicting_crossing_agent(
             *conflict = true;
             break;
         }
+    }
+    return true;
+}
+
+static bool car_modifier_safety_find_lead(
+    const geometry3d_instance_t *self,
+    const car_modifier_context_t *context,
+    bool *has_lead,
+    float *gap_units,
+    float *lead_speed)
+{
+    const car_modifier_environment_t *environment = context->environment;
+    *has_lead = false;
+    *gap_units = 0.0f;
+    *lead_speed = 0.0f;
+    if (environment == NULL || environment->agent_instances == NULL ||
+        environment->agent_contexts == NULL || environment->agent_count == NULL)
+    {
+        return environment == NULL ||
+            (environment->agent_instances == NULL &&
+             environment->agent_contexts == NULL && environment->agent_count == NULL);
+    }
+    if (*environment->agent_count > SCENE3D_MAX_AGENTS) return false;
+
+    const float yaw = self->transform.rotation_rad.y;
+    const float fx = sinf(yaw), fz = cosf(yaw);
+    const float sx = cosf(yaw), sz = -sinf(yaw);
+    const float self_hx = fabsf(self->transform.scale.x);
+    const float self_hz = fabsf(self->transform.scale.z);
+    const float self_forward = self_hz;
+    const float self_side = self_hx;
+    const float self_x = self->transform.position.x;
+    const float self_z = self->transform.position.z;
+    if (!isfinite(yaw) || !isfinite(self_hx) || !isfinite(self_hz) ||
+        self_hx <= 0.0f || self_hz <= 0.0f ||
+        !isfinite(self_x) || !isfinite(self_z)) return false;
+
+    float nearest_gap = CAR_SAFETY_SENSOR_RANGE_UNITS;
+    for (size_t i = 0U; i < *environment->agent_count; ++i)
+    {
+        const geometry3d_instance_t *other = &environment->agent_instances[i];
+        const car_modifier_context_t *other_context = &environment->agent_contexts[i];
+        if (other == self || other_context->state == CAR_MODIFIER_STATE_SPAWN)
+        {
+            continue;
+        }
+        const float other_yaw = other->transform.rotation_rad.y;
+        const float ofx = sinf(other_yaw), ofz = cosf(other_yaw);
+        /* Ignore crossing traffic: this controller only handles longitudinal following. */
+        if (!isfinite(other_yaw) || ofx * fx + ofz * fz < 0.95f) continue;
+        const float ohx = fabsf(other->transform.scale.x);
+        const float ohz = fabsf(other->transform.scale.z);
+        const float dx = other->transform.position.x - self_x;
+        const float dz = other->transform.position.z - self_z;
+        if (!isfinite(dx) || !isfinite(dz) || !isfinite(ohx) || !isfinite(ohz) ||
+            ohx <= 0.0f || ohz <= 0.0f) return false;
+        const float longitudinal = dx * fx + dz * fz;
+        const float lateral = dx * sx + dz * sz;
+        const float osx = cosf(other_yaw), osz = -sinf(other_yaw);
+        const float other_forward = ohz * fabsf(ofx * fx + ofz * fz) +
+                                    ohx * fabsf(osx * fx + osz * fz);
+        const float other_side = ohz * fabsf(ofx * sx + ofz * sz) +
+                                 ohx * fabsf(osx * sx + osz * sz);
+        const float gap = longitudinal - self_forward - other_forward;
+        if (longitudinal <= 0.0f ||
+            fabsf(lateral) > self_side + other_side + CAR_SAFETY_LANE_OVERLAP_TOLERANCE_UNITS ||
+            gap >= nearest_gap) continue;
+
+        nearest_gap = gap;
+        *has_lead = true;
+        *gap_units = gap;
+        *lead_speed = (other_context->state == CAR_MODIFIER_STATE_TRAFFIC_CHECK ||
+                       other_context->safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED)
+            ? 0.0f : other_context->trajectory.speed_units_per_second;
+        if (!isfinite(*lead_speed) || *lead_speed < 0.0f) return false;
     }
     return true;
 }
@@ -389,6 +470,8 @@ bool car_modifier_context_init(
     result.state = CAR_MODIFIER_STATE_FREE;
     result.approach_yaw_rad = initial_pose->yaw_rad;
     result.safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
+    result.cruise_speed_units_per_second = speed_units_per_second;
+    result.safety_target_speed_units_per_second = speed_units_per_second;
     *context = result;
     return true;
 }
@@ -424,6 +507,8 @@ bool car_modifier_route_init(
 
     result.state = CAR_MODIFIER_STATE_APPROACH_TURN;
     result.safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
+    result.cruise_speed_units_per_second = speed_units_per_second;
+    result.safety_target_speed_units_per_second = speed_units_per_second;
     result.approach_distance_remaining = distance_to_maneuver;
     result.turn_radius = is_turn ? turn_radius : 0.0f;
     result.maneuver = maneuver;
@@ -450,6 +535,7 @@ bool car_modifier_update(
     car_modifier_context_t next_context = *car_context;
     if (next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_CLEAR &&
         next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_YIELDING &&
+        next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_FOLLOWING &&
         next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED)
     {
         return false;
@@ -476,8 +562,46 @@ bool car_modifier_update(
         remaining_dt = 0.0f;
     }
 
-    /* Safety supervision has priority and can freeze route progress. */
-    if (next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_CLEAR)
+    if (!spawned && dt_seconds > 0.0f &&
+        next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED)
+    {
+        const float current_speed = next_context.trajectory.speed_units_per_second;
+        const float target_speed = next_context.safety_target_speed_units_per_second;
+        if (!isfinite(current_speed) || current_speed < 0.0f ||
+            !isfinite(target_speed) || target_speed < 0.0f) return false;
+        if (current_speed == 0.0f && target_speed == 0.0f)
+        {
+            remaining_dt = 0.0f;
+        }
+        else
+        {
+            const float rate = target_speed < current_speed
+                ? CAR_SAFETY_MAX_DECELERATION_UNITS_PER_SECOND_SQUARED
+                : CAR_SAFETY_MAX_ACCELERATION_UNITS_PER_SECOND_SQUARED;
+            float updated_speed = current_speed;
+            const float max_delta = rate * dt_seconds;
+            if (target_speed < current_speed)
+                updated_speed = fmaxf(target_speed, current_speed - max_delta);
+            else
+                updated_speed = fminf(target_speed, current_speed + max_delta);
+            if (updated_speed <= 0.001f)
+            {
+                updated_speed = 0.0f;
+                remaining_dt = 0.0f;
+            }
+            next_context.trajectory.speed_units_per_second = updated_speed;
+        }
+        if (next_context.trajectory.phase == CAR_TRAJECTORY_TURNING)
+        {
+            if (next_context.trajectory.speed_units_per_second > 0.0f)
+                next_context.trajectory.turn_angular_speed_rad_per_second =
+                    next_context.trajectory.speed_units_per_second /
+                    next_context.trajectory.turn_radius;
+        }
+    }
+
+    /* A fully stopped vehicle holds position; FOLLOWING brakes through the speed controller. */
+    if (next_context.safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED)
     {
         remaining_dt = 0.0f;
     }
@@ -729,8 +853,50 @@ bool car_modifier_safety_update(
         return false;
     }
 
-    const car_modifier_context_t *car_context = context;
-    return car_context->safety_state == CAR_MODIFIER_SAFETY_STATE_CLEAR ||
-           car_context->safety_state == CAR_MODIFIER_SAFETY_STATE_YIELDING ||
-           car_context->safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED;
+    car_modifier_context_t *car_context = context;
+    if (car_context->safety_state != CAR_MODIFIER_SAFETY_STATE_CLEAR &&
+        car_context->safety_state != CAR_MODIFIER_SAFETY_STATE_YIELDING &&
+        car_context->safety_state != CAR_MODIFIER_SAFETY_STATE_FOLLOWING &&
+        car_context->safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED)
+        return false;
+    if (car_context->state == CAR_MODIFIER_STATE_SPAWN)
+    {
+        car_context->safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
+        car_context->safety_target_speed_units_per_second = 0.0f;
+        return true;
+    }
+    const float current_speed = car_context->trajectory.speed_units_per_second;
+    const float cruise_speed = car_context->cruise_speed_units_per_second;
+    if (!isfinite(current_speed) || current_speed < 0.0f ||
+        !isfinite(cruise_speed) || cruise_speed <= 0.0f) return false;
+
+    bool has_lead = false;
+    float gap = 0.0f;
+    float lead_speed = 0.0f;
+    if (!car_modifier_safety_find_lead(
+            instance, car_context, &has_lead, &gap, &lead_speed)) return false;
+    float target_speed = cruise_speed;
+    if (has_lead)
+    {
+        const float deceleration =
+            CAR_SAFETY_MAX_DECELERATION_UNITS_PER_SECOND_SQUARED;
+        const float time_buffer =
+            deceleration * CAR_SAFETY_TIME_HEADWAY_SECONDS;
+        float available_gap = gap - CAR_SAFETY_STANDSTILL_GAP_UNITS;
+        if (available_gap < 0.0f) available_gap = 0.0f;
+        const float radicand = time_buffer * time_buffer +
+            lead_speed * lead_speed + 2.0f * deceleration * available_gap;
+        target_speed = sqrtf(radicand) - time_buffer;
+        if (gap <= CAR_SAFETY_STANDSTILL_GAP_UNITS) target_speed = 0.0f;
+        if (target_speed < 0.0f) target_speed = 0.0f;
+        if (target_speed > cruise_speed) target_speed = cruise_speed;
+    }
+    car_context->safety_target_speed_units_per_second = target_speed;
+    if (has_lead && target_speed <= 0.001f && current_speed <= 0.05f)
+        car_context->safety_state = CAR_MODIFIER_SAFETY_STATE_STOPPED;
+    else if (has_lead && target_speed + 0.001f < current_speed)
+        car_context->safety_state = CAR_MODIFIER_SAFETY_STATE_FOLLOWING;
+    else
+        car_context->safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
+    return true;
 }

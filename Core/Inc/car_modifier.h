@@ -26,6 +26,7 @@ typedef enum
 {
     CAR_MODIFIER_SAFETY_STATE_CLEAR = 0,
     CAR_MODIFIER_SAFETY_STATE_YIELDING,
+    CAR_MODIFIER_SAFETY_STATE_FOLLOWING,
     CAR_MODIFIER_SAFETY_STATE_STOPPED
 } car_modifier_safety_state_t;
 
@@ -65,6 +66,8 @@ struct car_modifier_context
     car_trajectory_t trajectory;
     car_modifier_state_t state;
     car_modifier_safety_state_t safety_state;
+    float cruise_speed_units_per_second;
+    float safety_target_speed_units_per_second;
     float approach_distance_remaining;
     /* Remaining straight-line distance through the intersection. */
     float crossing_distance_remaining;

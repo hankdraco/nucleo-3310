@@ -163,12 +163,69 @@ static bool test_safety_fsm_starts_clear_and_overrides_route_motion(void)
     instance.transform.rotation_rad.y = initial_pose.yaw_rad;
 
     CHECK(car_modifier_safety_update(&instance, 0.5f, &context));
-    CHECK(context.safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED);
+    CHECK(context.safety_state == CAR_MODIFIER_SAFETY_STATE_CLEAR);
+    context.safety_state = CAR_MODIFIER_SAFETY_STATE_STOPPED;
     CHECK(car_modifier_update(&instance, 0.5f, &context));
     CHECK(test_float_equal(instance.transform.position.x, initial_pose.position.x));
     CHECK(test_float_equal(instance.transform.position.z, initial_pose.position.z));
     CHECK(test_float_equal(context.approach_distance_remaining, 5.0f));
 
+    return true;
+}
+
+static bool test_safety_following_reduces_speed_for_lead_vehicle(void)
+{
+    geometry3d_instance_t agents[2] = {0};
+    car_modifier_context_t contexts[2] = {0};
+    size_t agent_count = 2U;
+    car_modifier_environment_t environment =
+    {
+        .agent_instances = agents,
+        .agent_contexts = contexts,
+        .agent_count = &agent_count
+    };
+    car_modifier_context_t spawning_context = {0};
+    geometry3d_instance_t spawning_instance = {0};
+    CHECK(car_modifier_context_init_spawn(&spawning_context, &environment));
+    CHECK(car_modifier_safety_update(
+        &spawning_instance, 0.1f, &spawning_context));
+
+    const car_trajectory_pose_t follower_pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+        .yaw_rad = 0.0f
+    };
+    const car_trajectory_pose_t lead_pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = 8.5f },
+        .yaw_rad = 0.0f
+    };
+    CHECK(car_modifier_route_init(
+        &contexts[0], &follower_pose, 8.0f, 20.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    CHECK(car_modifier_route_init(
+        &contexts[1], &lead_pose, 2.0f, 20.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    contexts[0].environment = &environment;
+    contexts[1].environment = &environment;
+    agents[0].transform.scale.x = agents[1].transform.scale.x = 1.25f;
+    agents[0].transform.scale.z = agents[1].transform.scale.z = 2.25f;
+    agents[0].transform.rotation_rad.y = agents[1].transform.rotation_rad.y = 0.0f;
+    agents[0].transform.position.z = 0.0f;
+    agents[1].transform.position.z = 8.5f;
+
+    CHECK(car_modifier_safety_update(&agents[0], 0.1f, &contexts[0]));
+    CHECK(contexts[0].safety_state == CAR_MODIFIER_SAFETY_STATE_FOLLOWING);
+    CHECK(contexts[0].safety_target_speed_units_per_second < 8.0f);
+    CHECK(car_modifier_update(&agents[0], 0.1f, &contexts[0]));
+    CHECK(contexts[0].trajectory.speed_units_per_second < 8.0f);
+    CHECK(agents[0].transform.position.z > follower_pose.position.z);
+
+    contexts[1].state = CAR_MODIFIER_STATE_TRAFFIC_CHECK;
+    agents[1].transform.position.z = 5.5f;
+    CHECK(car_modifier_safety_update(&agents[0], 0.1f, &contexts[0]));
+    CHECK(contexts[0].safety_target_speed_units_per_second <= 0.001f);
+    CHECK(contexts[0].safety_state == CAR_MODIFIER_SAFETY_STATE_FOLLOWING);
     return true;
 }
 
@@ -606,6 +663,7 @@ bool test_car_modifier_suite(void)
     CHECK(test_car_modifier_propagates_trajectory_failure_atomically());
     CHECK(test_car_modifier_rejects_invalid_initialization());
     CHECK(test_safety_fsm_starts_clear_and_overrides_route_motion());
+    CHECK(test_safety_following_reduces_speed_for_lead_vehicle());
     CHECK(test_car_route_consumes_dt_across_approach_turn_and_departure());
     CHECK(test_car_route_captures_pivot_relative_to_vehicle());
     CHECK(test_car_route_captures_left_pivot_relative_to_vehicle());
