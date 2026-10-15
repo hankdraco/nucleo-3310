@@ -391,6 +391,8 @@ static bool test_traffic_check_waits_for_turning_agent_to_clear(void)
         CAR_MANEUVER_RIGHT, 3.0f));
     contexts[0].environment = &environment;
     contexts[1].state = CAR_MODIFIER_STATE_CROSSING;
+    contexts[1].maneuver = CAR_MANEUVER_STRAIGHT;
+    contexts[1].approach_yaw_rad = TEST_HALF_PI_RAD;
 
     CHECK(car_modifier_update(&agents[0], 1.0f, &contexts[0]));
     CHECK(contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK);
@@ -462,6 +464,8 @@ static bool test_traffic_check_also_blocks_straight_through_route(void)
         CAR_MANEUVER_STRAIGHT, 0.0f));
     contexts[0].environment = &environment;
     contexts[1].state = CAR_MODIFIER_STATE_CROSSING;
+    contexts[1].maneuver = CAR_MANEUVER_STRAIGHT;
+    contexts[1].approach_yaw_rad = TEST_HALF_PI_RAD;
 
     CHECK(car_modifier_update(&agents[0], 1.0f, &contexts[0]));
     CHECK(contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK);
@@ -516,6 +520,85 @@ static bool test_straight_route_crosses_intersection_before_departing(void)
     return true;
 }
 
+static bool test_traffic_conflict_matrix(void)
+{
+    const car_maneuver_t maneuvers[] =
+    {
+        CAR_MANEUVER_STRAIGHT,
+        CAR_MANEUVER_LEFT,
+        CAR_MANEUVER_RIGHT
+    };
+    const float relative_yaws[] =
+    {
+        0.0f,
+        TEST_HALF_PI_RAD,
+        2.0f * TEST_HALF_PI_RAD,
+        -TEST_HALF_PI_RAD
+    };
+    /* Rows: own maneuver; columns: same/left/opposite/right, then B straight/left/right. */
+    const bool expected[3][4][3] =
+    {
+        {
+            { false, false, false },
+            { true,  true,  false },
+            { false, true,  false },
+            { true,  true,  true  }
+        },
+        {
+            { false, false, false },
+            { true,  true,  false },
+            { true,  true,  true  },
+            { true,  true,  false }
+        },
+        {
+            { false, false, false },
+            { true,  false, false },
+            { false, true,  false },
+            { false, false, false }
+        }
+    };
+
+    for (size_t own_index = 0U; own_index < 3U; ++own_index)
+    {
+        for (size_t relation = 0U; relation < 4U; ++relation)
+        {
+            for (size_t other_index = 0U; other_index < 3U; ++other_index)
+            {
+                geometry3d_instance_t agents[2] = {0};
+                car_modifier_context_t contexts[2] = {0};
+                size_t agent_count = 2U;
+                car_modifier_environment_t environment =
+                {
+                    .street_half_width = 5.0f,
+                    .agent_instances = agents,
+                    .agent_contexts = contexts,
+                    .agent_count = &agent_count
+                };
+                const car_trajectory_pose_t pose =
+                {
+                    .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+                    .yaw_rad = 0.0f
+                };
+                const float radius = maneuvers[own_index] == CAR_MANEUVER_STRAIGHT
+                    ? 0.0f : 2.0f;
+                CHECK(car_modifier_route_init(
+                    &contexts[0], &pose, 1.0f, 0.0f,
+                    maneuvers[own_index], radius));
+                contexts[0].state = CAR_MODIFIER_STATE_TRAFFIC_CHECK;
+                contexts[0].environment = &environment;
+                contexts[1].state = CAR_MODIFIER_STATE_CROSSING;
+                contexts[1].maneuver = maneuvers[other_index];
+                contexts[1].approach_yaw_rad = relative_yaws[relation];
+
+                CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+                CHECK((contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK) ==
+                      expected[own_index][relation][other_index]);
+            }
+        }
+    }
+    return true;
+}
+
 bool test_car_modifier_suite(void)
 {
     CHECK(test_car_modifier_maps_straight_pose());
@@ -534,6 +617,7 @@ bool test_car_modifier_suite(void)
     CHECK(test_traffic_check_enters_turn_without_extra_wait_frame());
     CHECK(test_traffic_check_also_blocks_straight_through_route());
     CHECK(test_straight_route_crosses_intersection_before_departing());
+    CHECK(test_traffic_conflict_matrix());
 
     return true;
 }

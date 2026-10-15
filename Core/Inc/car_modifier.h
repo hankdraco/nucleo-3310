@@ -70,6 +70,8 @@ struct car_modifier_context
     float crossing_distance_remaining;
     float turn_radius;
     car_maneuver_t maneuver;
+    /* Heading on the incoming road, preserved while the trajectory turns. */
+    float approach_yaw_rad;
     car_modifier_environment_t *environment;
 };
 

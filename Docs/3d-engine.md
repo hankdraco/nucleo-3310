@@ -163,7 +163,7 @@ During a turn, the trajectory stores the turn's start pose and pivot. It evaluat
 
 ### 6.2 Route modifier and finite-state machine
 
-`car_modifier` owns the vehicle's route behaviour and its connection to the scene. Each vehicle has a separate `car_modifier_context_t`, which includes its trajectory, route-FSM state, safety-FSM state, approach distance, manoeuvre, turn radius, and a pointer to the shared environment.
+`car_modifier` owns the vehicle's route behaviour and its connection to the scene. Each vehicle has a separate `car_modifier_context_t`, which includes its trajectory, route-FSM state, safety-FSM state, approach distance, selected manoeuvre, original approach heading, turn radius, and a pointer to the shared environment.
 
 The states are:
 
@@ -188,9 +188,24 @@ SPAWN -> APPROACH_TURN -> TRAFFIC_CHECK -> CROSSING -> DEPARTING
                                                         SPAWN
 ```
 
-A vehicle reaches `TRAFFIC_CHECK` at the manoeuvre point. If another agent is in `CROSSING`, it remains at that position and retries on the next update. When the intersection is clear, the FSM immediately begins the selected manoeuvre. Turning vehicles remain in `CROSSING` until the trajectory completes its quarter-turn. Straight-through vehicles remain in `CROSSING` for a distance of `2 * street_half_width`, then enter `DEPARTING`. The initial traffic rule is intentionally conservative: any other agent in `CROSSING` blocks entry, regardless of its path. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
+A vehicle reaches `TRAFFIC_CHECK` at the manoeuvre point. It checks the intended path against agents already in `CROSSING`; a conflicting path makes it wait, while a non-conflicting path may enter the occupied intersection. Turning vehicles remain in `CROSSING` until the trajectory completes its quarter-turn. Straight-through vehicles remain in `CROSSING` for a distance of `2 * street_half_width`, then enter `DEPARTING`. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
 
-The route FSM contains the `TRAFFIC_CHECK` gate; it currently uses only the other agents' route state (`CROSSING`) and does not yet apply right-of-way rules or compare crossing paths. The context also has a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`), which remains an inert scaffold: its update callback validates and preserves the state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over route progress by freezing it.
+The relative approach is derived from the original incoming heading, stored in `approach_yaw_rad` so a vehicle's changing yaw during a turn cannot change its identity. “From the left/right” is relative to the candidate vehicle A. The conflict table below lists the other vehicle B's maneuver; `C` means the paths conflict and `—` means they do not. Vehicles from the same approach are always considered non-conflicting.
+
+| A's maneuver | B approaches from | B right | B straight | B left |
+| --- | --- | --- | --- | --- |
+| Right | Left | — | C | — |
+| Right | Opposite | — | — | C |
+| Right | Right | — | — | — |
+| Left | Left | — | C | C |
+| Left | Opposite | C | C | C |
+| Left | Right | — | C | C |
+| Straight | Left | — | C | C |
+| Straight | Opposite | — | — | C |
+| Straight | Right | C | C | C |
+| Any | Same approach | — | — | — |
+
+The route FSM contains the `TRAFFIC_CHECK` gate. It applies the path-conflict table above; formal right-of-way priority and conflict checks against agents that are only approaching remain out of scope. The context also has a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`), which remains an inert scaffold: its update callback validates and preserves the state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over route progress by freezing it.
 
 The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a candidate is blocked, the route state and transform remain unchanged and the shared random state advances so the next frame can try another location. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
 
@@ -207,7 +222,7 @@ All vehicles point to the same environment. Each vehicle nevertheless has its ow
 
 The random generator is shared so that each spawn advances one common deterministic sequence rather than maintaining a separate random stream per vehicle. The environment's lifetime must outlast every vehicle context that references it.
 
-The current application configures five cars through `APP_CAR_COUNT`. The loader loops over the requested count and initializes a distinct context and agent instance for each car. The count must fit the application's context array and the scene's overall instance capacity.
+The application configures the car count through `APP_CAR_COUNT`. The loader loops over the requested count and initializes a distinct context and agent instance for each car. The count must fit the application's context array and the scene's overall instance capacity.
 
 ### 6.4 Transactional update intent
 

@@ -16,18 +16,119 @@ static bool car_modifier_inside_city(const car_trajectory_pose_t *p,const car_mo
  p->position.z>=-e->city_half_extent_z&&p->position.z<=e->city_half_extent_z;
 }
 
-static bool car_modifier_intersection_is_occupied(
+typedef enum
+{
+    CAR_MODIFIER_RELATION_SAME = 0,
+    CAR_MODIFIER_RELATION_LEFT,
+    CAR_MODIFIER_RELATION_OPPOSITE,
+    CAR_MODIFIER_RELATION_RIGHT,
+    CAR_MODIFIER_RELATION_INVALID
+} car_modifier_relative_approach_t;
+
+static car_modifier_relative_approach_t car_modifier_get_relative_approach(
+    float reference_yaw,
+    float other_yaw)
+{
+    if (!isfinite(reference_yaw) || !isfinite(other_yaw))
+    {
+        return CAR_MODIFIER_RELATION_INVALID;
+    }
+
+    const float two_pi = 2.0f * CAR_MODIFIER_PI_RAD;
+    float delta = fmodf(other_yaw - reference_yaw, two_pi);
+    if (delta < 0.0f)
+    {
+        delta += two_pi;
+    }
+    if (delta <= CAR_MODIFIER_TOLERANCE ||
+        two_pi - delta <= CAR_MODIFIER_TOLERANCE)
+    {
+        return CAR_MODIFIER_RELATION_SAME;
+    }
+    if (fabsf(delta - CAR_MODIFIER_PI_RAD * 0.5f) <= CAR_MODIFIER_TOLERANCE)
+    {
+        return CAR_MODIFIER_RELATION_LEFT;
+    }
+    if (fabsf(delta - CAR_MODIFIER_PI_RAD) <= CAR_MODIFIER_TOLERANCE)
+    {
+        return CAR_MODIFIER_RELATION_OPPOSITE;
+    }
+    if (fabsf(delta - CAR_MODIFIER_PI_RAD * 1.5f) <= CAR_MODIFIER_TOLERANCE)
+    {
+        return CAR_MODIFIER_RELATION_RIGHT;
+    }
+    return CAR_MODIFIER_RELATION_INVALID;
+}
+
+static bool car_modifier_routes_conflict(
+    car_maneuver_t own_maneuver,
+    car_modifier_relative_approach_t other_approach,
+    car_maneuver_t other_maneuver)
+{
+    if (other_approach == CAR_MODIFIER_RELATION_SAME)
+    {
+        return false;
+    }
+
+    if (own_maneuver != CAR_MANEUVER_RIGHT &&
+        own_maneuver != CAR_MANEUVER_STRAIGHT &&
+        own_maneuver != CAR_MANEUVER_LEFT)
+    {
+        return true;
+    }
+    if (other_approach == CAR_MODIFIER_RELATION_INVALID ||
+        (other_maneuver != CAR_MANEUVER_RIGHT &&
+         other_maneuver != CAR_MANEUVER_STRAIGHT &&
+         other_maneuver != CAR_MANEUVER_LEFT))
+    {
+        return true;
+    }
+
+    switch (own_maneuver)
+    {
+        case CAR_MANEUVER_RIGHT:
+            return (other_approach == CAR_MODIFIER_RELATION_LEFT &&
+                    other_maneuver == CAR_MANEUVER_STRAIGHT) ||
+                   (other_approach == CAR_MODIFIER_RELATION_OPPOSITE &&
+                    other_maneuver == CAR_MANEUVER_LEFT);
+
+        case CAR_MANEUVER_LEFT:
+            return (other_approach == CAR_MODIFIER_RELATION_LEFT &&
+                    (other_maneuver == CAR_MANEUVER_STRAIGHT ||
+                     other_maneuver == CAR_MANEUVER_LEFT)) ||
+                   (other_approach == CAR_MODIFIER_RELATION_OPPOSITE &&
+                    (other_maneuver == CAR_MANEUVER_RIGHT ||
+                     other_maneuver == CAR_MANEUVER_STRAIGHT ||
+                     other_maneuver == CAR_MANEUVER_LEFT)) ||
+                   (other_approach == CAR_MODIFIER_RELATION_RIGHT &&
+                    (other_maneuver == CAR_MANEUVER_STRAIGHT ||
+                     other_maneuver == CAR_MANEUVER_LEFT));
+
+        case CAR_MANEUVER_STRAIGHT:
+            return (other_approach == CAR_MODIFIER_RELATION_LEFT &&
+                    (other_maneuver == CAR_MANEUVER_STRAIGHT ||
+                     other_maneuver == CAR_MANEUVER_LEFT)) ||
+                   (other_approach == CAR_MODIFIER_RELATION_OPPOSITE &&
+                    other_maneuver == CAR_MANEUVER_LEFT) ||
+                   (other_approach == CAR_MODIFIER_RELATION_RIGHT);
+
+        default:
+            return true;
+    }
+}
+
+static bool car_modifier_has_conflicting_crossing_agent(
     const geometry3d_instance_t *self,
     const car_modifier_context_t *context,
-    bool *occupied)
+    bool *conflict)
 {
-    if (self == NULL || context == NULL || occupied == NULL)
+    if (self == NULL || context == NULL || conflict == NULL)
     {
         return false;
     }
 
     const car_modifier_environment_t *environment = context->environment;
-    *occupied = false;
+    *conflict = false;
     if (environment == NULL)
     {
         return true;
@@ -50,10 +151,17 @@ static bool car_modifier_intersection_is_occupied(
 
     for (size_t i = 0U; i < *environment->agent_count; ++i)
     {
+        const car_modifier_context_t *other_context = &environment->agent_contexts[i];
         if (&environment->agent_instances[i] != self &&
-            environment->agent_contexts[i].state == CAR_MODIFIER_STATE_CROSSING)
+            other_context->state == CAR_MODIFIER_STATE_CROSSING &&
+            car_modifier_routes_conflict(
+                context->maneuver,
+                car_modifier_get_relative_approach(
+                    context->approach_yaw_rad,
+                    other_context->approach_yaw_rad),
+                other_context->maneuver))
         {
-            *occupied = true;
+            *conflict = true;
             break;
         }
     }
@@ -279,6 +387,7 @@ bool car_modifier_context_init(
     }
 
     result.state = CAR_MODIFIER_STATE_FREE;
+    result.approach_yaw_rad = initial_pose->yaw_rad;
     result.safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
     *context = result;
     return true;
@@ -318,6 +427,7 @@ bool car_modifier_route_init(
     result.approach_distance_remaining = distance_to_maneuver;
     result.turn_radius = is_turn ? turn_radius : 0.0f;
     result.maneuver = maneuver;
+    result.approach_yaw_rad = initial_pose->yaw_rad;
 
     *context = result;
     return true;
@@ -373,13 +483,13 @@ bool car_modifier_update(
     }
     else if (next_context.state == CAR_MODIFIER_STATE_TRAFFIC_CHECK)
     {
-        bool intersection_occupied = false;
-        if (!car_modifier_intersection_is_occupied(
-                instance, &next_context, &intersection_occupied))
+        bool route_conflict = false;
+        if (!car_modifier_has_conflicting_crossing_agent(
+                instance, &next_context, &route_conflict))
         {
             return false;
         }
-        if (intersection_occupied)
+        if (route_conflict)
         {
             return true;
         }
@@ -485,13 +595,13 @@ bool car_modifier_update(
                 remaining_dt -= time_to_turn;
 
                 next_context.state = CAR_MODIFIER_STATE_TRAFFIC_CHECK;
-                bool intersection_occupied = false;
-                if (!car_modifier_intersection_is_occupied(
-                        instance, &next_context, &intersection_occupied))
+                bool route_conflict = false;
+                if (!car_modifier_has_conflicting_crossing_agent(
+                        instance, &next_context, &route_conflict))
                 {
                     return false;
                 }
-                if (intersection_occupied)
+                if (route_conflict)
                 {
                     remaining_dt = 0.0f;
                     break;
