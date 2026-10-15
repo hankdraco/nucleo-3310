@@ -36,7 +36,7 @@ The current scene is a demonstration environment: a ground plane, crossing stree
 | `renderer3d` | Transforming mesh vertices, near-plane clipping, depth rasterization, and visible edge drawing |
 | `rasterizer3d` / `depth_buffer` | Low-level pixel/line/triangle rasterization and depth storage |
 | `car_trajectory` | Portable constant-speed straight motion and circular quarter-turn mathematics |
-| `car_modifier` | Vehicle route FSM, safety-supervision FSM scaffold, spawn/respawn policy, and synchronization with a renderable instance |
+| `car_modifier` | Vehicle route FSM with a traffic-check gate, safety-supervision FSM scaffold, spawn/respawn policy, and synchronization with a renderable instance |
 | `app` | Top-level update/render scheduling and the display hardware boundary |
 
 The application initializes the scene through `scene_loader_load()`; it does not need to know which models or demo objects are created. The loader owns scene composition, while `app` owns the long-lived runtime state required by the scene.
@@ -172,24 +172,25 @@ The states are:
 | `SPAWN` | Retry a candidate route and pose until the spawn footprint is clear |
 | `FREE` | Straight trajectory without route-manoeuvre handling |
 | `APPROACH_TURN` | Travels straight until the selected manoeuvre point |
+| `TRAFFIC_CHECK` | Waits at the intersection entry while another agent is turning |
 | `TURNING` | Executes the captured circular quarter-turn |
 | `DEPARTING` | Continues along the outgoing street and checks whether the car has left the city |
 
 For the demo's routed cars, the typical progression is:
 
 ```text
-SPAWN -> APPROACH_TURN -> TURNING -> DEPARTING
-                  |                    |
-                  +-- straight route --+
-                                       |
-                           leaves city bounds
-                                       |
-                                     SPAWN
+SPAWN -> APPROACH_TURN -> TRAFFIC_CHECK -> TURNING -> DEPARTING
+                                  |                       |
+                                  +-- straight route -----+
+                                                          |
+                                              leaves city bounds
+                                                          |
+                                                        SPAWN
 ```
 
-A straight manoeuvre skips the turning phase and proceeds from approach to departure. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
+A vehicle reaches `TRAFFIC_CHECK` at the manoeuvre point. If another agent is in `TURNING`, it remains at that position and retries on the next update. When the intersection is clear, the FSM immediately begins the selected manoeuvre; straight-through traffic proceeds to `DEPARTING` without using the `TURNING` trajectory phase. The initial traffic rule is intentionally conservative: any other agent in `TURNING` blocks entry, regardless of its path. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
 
-The context also contains a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`). Its update callback currently validates and preserves that state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over the route FSM by freezing route progress; the state starts as `CLEAR` and remains there until safety behaviour is implemented.
+The route FSM contains the `TRAFFIC_CHECK` gate; it currently uses only the other agents' route state (`TURNING`) and does not yet apply right-of-way rules or compare crossing paths. The context also has a separate safety-supervision FSM state (`CLEAR`, `YIELDING`, or `STOPPED`), which remains an inert scaffold: its update callback validates and preserves the state but does not perform sensing or make decisions. Any non-`CLEAR` safety state takes priority over route progress by freezing it.
 
 The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a candidate is blocked, the route state and transform remain unchanged and the shared random state advances so the next frame can try another location. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
 

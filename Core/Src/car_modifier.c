@@ -15,6 +15,82 @@ static bool car_modifier_inside_city(const car_trajectory_pose_t *p,const car_mo
  p->position.x>=-e->city_half_extent_x&&p->position.x<=e->city_half_extent_x&&
  p->position.z>=-e->city_half_extent_z&&p->position.z<=e->city_half_extent_z;
 }
+
+static bool car_modifier_intersection_is_occupied(
+    const geometry3d_instance_t *self,
+    const car_modifier_context_t *context,
+    bool *occupied)
+{
+    if (self == NULL || context == NULL || occupied == NULL)
+    {
+        return false;
+    }
+
+    const car_modifier_environment_t *environment = context->environment;
+    *occupied = false;
+    if (environment == NULL)
+    {
+        return true;
+    }
+
+    const bool has_registry = environment->agent_instances != NULL &&
+                              environment->agent_contexts != NULL &&
+                              environment->agent_count != NULL;
+    const bool has_any_registry = environment->agent_instances != NULL ||
+                                  environment->agent_contexts != NULL ||
+                                  environment->agent_count != NULL;
+    if (!has_any_registry)
+    {
+        return true;
+    }
+    if (!has_registry || *environment->agent_count > SCENE3D_MAX_AGENTS)
+    {
+        return false;
+    }
+
+    for (size_t i = 0U; i < *environment->agent_count; ++i)
+    {
+        if (&environment->agent_instances[i] != self &&
+            environment->agent_contexts[i].state == CAR_MODIFIER_STATE_TURNING)
+        {
+            *occupied = true;
+            break;
+        }
+    }
+    return true;
+}
+
+static bool car_modifier_begin_maneuver(car_modifier_context_t *context)
+{
+    if (context->maneuver == CAR_MANEUVER_STRAIGHT)
+    {
+        context->state = CAR_MODIFIER_STATE_DEPARTING;
+        return true;
+    }
+
+    const car_turn_direction_t direction =
+        (context->maneuver == CAR_MANEUVER_RIGHT)
+            ? CAR_TURN_DIRECTION_RIGHT
+            : CAR_TURN_DIRECTION_LEFT;
+    const float turn_sign =
+        (direction == CAR_TURN_DIRECTION_RIGHT) ? 1.0f : -1.0f;
+    const float yaw = context->trajectory.pose.yaw_rad;
+    const car_trajectory_vec3_t pivot =
+    {
+        .x = context->trajectory.pose.position.x +
+             turn_sign * context->turn_radius * cosf(yaw),
+        .y = context->trajectory.pose.position.y,
+        .z = context->trajectory.pose.position.z -
+             turn_sign * context->turn_radius * sinf(yaw)
+    };
+    if (!car_trajectory_begin_turn(&context->trajectory, &pivot, direction))
+    {
+        return false;
+    }
+    context->state = CAR_MODIFIER_STATE_TURNING;
+    return true;
+}
+
 static uint32_t car_modifier_random_next(uint32_t *s)
 {
  uint32_t x=*s;if(x==0U)x=0x6D2B79F5U;
@@ -286,6 +362,23 @@ bool car_modifier_update(
     {
         remaining_dt = 0.0f;
     }
+    else if (next_context.state == CAR_MODIFIER_STATE_TRAFFIC_CHECK)
+    {
+        bool intersection_occupied = false;
+        if (!car_modifier_intersection_is_occupied(
+                instance, &next_context, &intersection_occupied))
+        {
+            return false;
+        }
+        if (intersection_occupied)
+        {
+            return true;
+        }
+        if (!car_modifier_begin_maneuver(&next_context))
+        {
+            return false;
+        }
+    }
 
     /*
      * A single update can cross more than one state boundary:
@@ -382,35 +475,24 @@ bool car_modifier_update(
 
                 remaining_dt -= time_to_turn;
 
-                if (next_context.maneuver == CAR_MANEUVER_STRAIGHT)
-                {
-                    next_context.state = CAR_MODIFIER_STATE_DEPARTING;
-                    continue;
-                }
-
-                const car_turn_direction_t turn_direction =
-                    (next_context.maneuver == CAR_MANEUVER_RIGHT)
-                        ? CAR_TURN_DIRECTION_RIGHT
-                        : CAR_TURN_DIRECTION_LEFT;
-                const float turn_sign =
-                    (turn_direction == CAR_TURN_DIRECTION_RIGHT) ? 1.0f : -1.0f;
-                const float yaw = next_context.trajectory.pose.yaw_rad;
-                const car_trajectory_vec3_t turn_pivot =
-                {
-                    .x = next_context.trajectory.pose.position.x +
-                         turn_sign * next_context.turn_radius * cosf(yaw),
-                    .y = next_context.trajectory.pose.position.y,
-                    .z = next_context.trajectory.pose.position.z -
-                         turn_sign * next_context.turn_radius * sinf(yaw)
-                };
-
-                if (!car_trajectory_begin_turn(
-                        &next_context.trajectory, &turn_pivot, turn_direction))
+                next_context.state = CAR_MODIFIER_STATE_TRAFFIC_CHECK;
+                bool intersection_occupied = false;
+                if (!car_modifier_intersection_is_occupied(
+                        instance, &next_context, &intersection_occupied))
                 {
                     return false;
                 }
+                if (intersection_occupied)
+                {
+                    remaining_dt = 0.0f;
+                    break;
+                }
 
-                next_context.state = CAR_MODIFIER_STATE_TURNING;
+                if (!car_modifier_begin_maneuver(&next_context))
+                {
+                    return false;
+                }
+                continue;
             }
         }
         else if (next_context.state == CAR_MODIFIER_STATE_TURNING)
