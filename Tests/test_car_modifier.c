@@ -583,6 +583,79 @@ static bool test_intersection_reservation_cannot_be_revoked(void)
     return true;
 }
 
+static bool test_four_way_deadlock_selects_one_deterministic_winner(void)
+{
+    geometry3d_instance_t agents[4] = {0};
+    car_modifier_context_t contexts[4] = {0};
+    size_t agent_count = 4U;
+    car_modifier_environment_t environment =
+    {
+        .street_half_width = 5.0f,
+        .agent_instances = agents,
+        .agent_contexts = contexts,
+        .agent_count = &agent_count
+    };
+    const float approach_yaws[4] =
+    {
+        0.0f,
+        TEST_HALF_PI_RAD,
+        TEST_HALF_PI_RAD * 2.0f,
+        -TEST_HALF_PI_RAD
+    };
+
+    for (size_t i = 0U; i < agent_count; ++i)
+    {
+        const car_trajectory_pose_t pose =
+        {
+            .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+            .yaw_rad = approach_yaws[i]
+        };
+        CHECK(car_modifier_route_init(&contexts[i], &pose, 2.0f, 0.0f,
+            CAR_MANEUVER_STRAIGHT, 0.0f));
+        contexts[i].environment = &environment;
+        contexts[i].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    }
+
+    /* All four yield to the vehicle on their right, forming one wait cycle. */
+    CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
+    CHECK(contexts[0].intersection_reserved == 0U);
+
+    /* The crossing vehicle now blocks the other three in this same frame. */
+    for (size_t i = 1U; i < agent_count; ++i)
+    {
+        CHECK(car_modifier_update(&agents[i], 0.0f, &contexts[i]));
+        CHECK(contexts[i].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+    }
+    return true;
+}
+
+static bool test_stopped_turning_car_waits_for_positive_dt_to_start_turn(void)
+{
+    const car_trajectory_pose_t pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+        .yaw_rad = 0.0f
+    };
+    car_modifier_context_t context;
+    geometry3d_instance_t instance = {0};
+    CHECK(car_modifier_route_init(&context, &pose, 2.0f, 0.0f,
+        CAR_MANEUVER_LEFT, 2.0f));
+    context.state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    context.trajectory.speed_units_per_second = 0.0f;
+
+    /* A zero-duration update must not attempt a turn at zero linear speed. */
+    CHECK(car_modifier_update(&instance, 0.0f, &context));
+    CHECK(context.state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+    CHECK(context.trajectory.phase == CAR_TRAJECTORY_STRAIGHT);
+
+    CHECK(car_modifier_update(&instance, 0.1f, &context));
+    CHECK(context.state == CAR_MODIFIER_STATE_CROSSING);
+    CHECK(context.trajectory.phase == CAR_TRAJECTORY_TURNING);
+    CHECK(context.trajectory.turn_angular_speed_rad_per_second > 0.0f);
+    return true;
+}
+
 static bool test_buffer_zone_brakes_to_stop_line_for_conflict(void)
 {
     geometry3d_instance_t agents[2] = {0};
@@ -829,6 +902,8 @@ bool test_car_modifier_suite(void)
     CHECK(test_buffer_zone_waits_for_crossing_agent_to_clear());
     CHECK(test_buffer_zone_right_hand_priority_and_order_tiebreak());
     CHECK(test_intersection_reservation_cannot_be_revoked());
+    CHECK(test_four_way_deadlock_selects_one_deterministic_winner());
+    CHECK(test_stopped_turning_car_waits_for_positive_dt_to_start_turn());
     CHECK(test_buffer_zone_brakes_to_stop_line_for_conflict());
     CHECK(test_buffer_zone_enters_turn_without_extra_wait_frame());
     CHECK(test_buffer_zone_also_blocks_straight_through_route());

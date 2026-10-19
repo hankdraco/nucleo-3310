@@ -126,6 +126,98 @@ static bool car_modifier_routes_conflict(
     }
 }
 
+static bool car_modifier_is_deadlock_winner(
+    const car_modifier_environment_t *environment,
+    size_t self_index,
+    uint16_t *deadlock_group_mask)
+{
+    if (environment == NULL || deadlock_group_mask == NULL ||
+        environment->agent_instances == NULL ||
+        environment->agent_contexts == NULL ||
+        environment->agent_count == NULL ||
+        *environment->agent_count > SCENE3D_MAX_AGENTS)
+    {
+        return false;
+    }
+
+    *deadlock_group_mask = 0U;
+    const size_t count = *environment->agent_count;
+    if (self_index >= count) return false;
+
+    uint16_t wait_edges[SCENE3D_MAX_AGENTS] = {0U};
+    for (size_t i = 0U; i < count; ++i)
+    {
+        const car_modifier_context_t *context =
+            &environment->agent_contexts[i];
+        if (context->state == CAR_MODIFIER_STATE_CROSSING ||
+            context->intersection_reserved != 0U)
+        {
+            return false;
+        }
+        if (context->state != CAR_MODIFIER_STATE_BUFFER_ZONE) continue;
+
+        for (size_t j = 0U; j < count; ++j)
+        {
+            if (i == j || environment->agent_contexts[j].state !=
+                              CAR_MODIFIER_STATE_BUFFER_ZONE)
+            {
+                continue;
+            }
+
+            const car_modifier_context_t *other_context =
+                &environment->agent_contexts[j];
+            const car_modifier_relative_approach_t relation =
+                car_modifier_get_relative_approach(
+                    context->approach_yaw_rad,
+                    other_context->approach_yaw_rad);
+            if (!car_modifier_routes_conflict(
+                    context->maneuver, relation, other_context->maneuver))
+            {
+                continue;
+            }
+
+            if (relation == CAR_MODIFIER_RELATION_RIGHT ||
+                (relation != CAR_MODIFIER_RELATION_LEFT && j < i))
+            {
+                wait_edges[i] |= (uint16_t)((uint16_t)1U << j);
+            }
+        }
+    }
+
+    /* Transitive closure identifies which agents can reach each other. */
+    for (size_t via = 0U; via < count; ++via)
+    {
+        const uint16_t via_bit = (uint16_t)((uint16_t)1U << via);
+        for (size_t from = 0U; from < count; ++from)
+        {
+            if ((wait_edges[from] & via_bit) != 0U)
+            {
+                wait_edges[from] |= wait_edges[via];
+            }
+        }
+    }
+
+    const uint16_t self_bit = (uint16_t)((uint16_t)1U << self_index);
+    if ((wait_edges[self_index] & self_bit) == 0U)
+    {
+        return false;
+    }
+
+    size_t winner_index = count;
+    for (size_t i = 0U; i < count; ++i)
+    {
+        const uint16_t i_bit = (uint16_t)((uint16_t)1U << i);
+        if ((wait_edges[self_index] & i_bit) != 0U &&
+            (wait_edges[i] & self_bit) != 0U)
+        {
+            *deadlock_group_mask |= i_bit;
+            if (i < winner_index) winner_index = i;
+        }
+    }
+
+    return winner_index == self_index;
+}
+
 static bool car_modifier_has_traffic_blocker(
     const geometry3d_instance_t *self,
     const car_modifier_context_t *context,
@@ -159,6 +251,7 @@ static bool car_modifier_has_traffic_blocker(
     }
 
     size_t self_index = SIZE_MAX;
+    uint16_t priority_blockers = 0U;
     for (size_t i = 0U; i < *environment->agent_count; ++i)
     {
         if (&environment->agent_instances[i] == self)
@@ -202,10 +295,19 @@ static bool car_modifier_has_traffic_blocker(
         if (relation == CAR_MODIFIER_RELATION_RIGHT ||
             (relation != CAR_MODIFIER_RELATION_LEFT && i < self_index))
         {
-            *blocked = true;
-            return true;
+            priority_blockers |= (uint16_t)((uint16_t)1U << i);
         }
     }
+
+    uint16_t deadlock_group_mask = 0U;
+    if (priority_blockers != 0U &&
+        car_modifier_is_deadlock_winner(
+            environment, self_index, &deadlock_group_mask))
+    {
+        /* A deadlock winner ignores only the blockers in its own cycle. */
+        priority_blockers &= (uint16_t)~deadlock_group_mask;
+    }
+    *blocked = priority_blockers != 0U;
     return true;
 }
 
@@ -719,6 +821,9 @@ bool car_modifier_update(
     }
     else if (!spawned && next_context.state == CAR_MODIFIER_STATE_BUFFER_ZONE &&
              dt_seconds == 0.0f && !traffic_blocked &&
+             (next_context.maneuver == CAR_MANEUVER_STRAIGHT ||
+              next_context.trajectory.speed_units_per_second >
+                  CAR_MODIFIER_TOLERANCE) &&
              next_context.approach_distance_remaining <=
                  car_modifier_get_stop_line_offset() + CAR_MODIFIER_TOLERANCE)
     {
