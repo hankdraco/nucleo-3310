@@ -13,6 +13,7 @@ bool test_car_spawn_suite(void);
 bool test_car_footprint_suite(void);
 bool test_modifier3d_suite(void);
 bool test_scene3d_agent_update_suite(void);
+bool test_city_models_suite(void);
 
 int main(void)
 {
@@ -102,6 +103,13 @@ int main(void)
         return 1;
     }
     printf("SCENE3D AGENT UPDATE TESTS PASSED\n");
+
+    if (!test_city_models_suite())
+    {
+        printf("CITY MODEL TESTS FAILED\n");
+        return 1;
+    }
+    printf("CITY MODEL TESTS PASSED\n");
 
     printf("ALL TESTS PASSED\n");
 

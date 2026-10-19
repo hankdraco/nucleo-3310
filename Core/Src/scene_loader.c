@@ -12,8 +12,6 @@
 
 #define SCENE_LOADER_CITY_SCALE         (8.0f)
 #define SCENE_LOADER_CITY_HALF_EXTENT 20.0f
-#define SCENE_LOADER_STREET_HALF_WIDTH \
-    (1.6f * SCENE_LOADER_CITY_SCALE)
 
 #define SCENE_LOADER_BUILDING_COLUMNS 4U
 #define SCENE_LOADER_BUILDING_ROWS    3U
@@ -397,36 +395,21 @@ bool scene_loader_load(
     };
 
     /*
-     * 2. Two crossing streets.
-     * The slightly elevated outlines remain distinct from the ground.
+     * 2. One plus-shaped street mesh covering the same XZ footprint as the
+     * former crossing rectangles. Its single surface avoids overlap at the
+     * intersection and sits just above the ground plane.
      */
-    const geometry3d_instance_t street_x =
+    const geometry3d_instance_t streets =
     {
-        .model = &geometry3d_plane_model,
-        .transform =
-        {
-            .position = { .x = 0.0f, .y = 0.02f, .z = 0.0f },
-            .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
-            .scale =
-            {
-                .x = SCENE_LOADER_CITY_HALF_EXTENT *
-                    SCENE_LOADER_CITY_SCALE,
-                .y = 1.0f,
-                .z = SCENE_LOADER_STREET_HALF_WIDTH
-            }
-        }
-    };
-
-    const geometry3d_instance_t street_z =
-    {
-        .model = &geometry3d_plane_model,
+        .model = &geometry3d_plus_road_model,
         .transform =
         {
             .position = { .x = 0.0f, .y = 0.025f, .z = 0.0f },
             .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
             .scale =
             {
-                .x = SCENE_LOADER_STREET_HALF_WIDTH,
+                .x = SCENE_LOADER_CITY_HALF_EXTENT *
+                    SCENE_LOADER_CITY_SCALE,
                 .y = 1.0f,
                 .z = SCENE_LOADER_CITY_HALF_EXTENT *
                     SCENE_LOADER_CITY_SCALE
@@ -435,8 +418,7 @@ bool scene_loader_load(
     };
 
     if (!scene3d_add_instance(scene, &ground) ||
-        !scene3d_add_instance(scene, &street_x) ||
-        !scene3d_add_instance(scene, &street_z))
+        !scene3d_add_instance(scene, &streets))
     {
         goto fail;
     }

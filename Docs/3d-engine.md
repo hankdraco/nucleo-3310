@@ -19,7 +19,7 @@ The engine is intended to make the individual parts of a small 3D pipeline under
 - Prefer bounded arrays and explicit limits over dynamic allocation.
 - Validate inputs and reject invalid state rather than silently propagating non-finite values.
 
-The current scene is a demonstration environment: a ground plane, crossing streets, buildings, an animated central assembly with six attached cubes, and several moving cars.
+The current scene is a demonstration environment: a ground plane, a single plus-shaped street mesh, buildings, an animated central assembly with six attached cubes, and several moving cars.
 
 ## 2. Main modules and responsibilities
 
@@ -238,7 +238,7 @@ The route modifier works on a copy of the car context while calculating an updat
 
 The demo scene contains several logical categories:
 
-- ground and crossing street planes;
+- a ground plane and a plus-shaped street mesh;
 - city-building instances;
 - a central animated centerpiece and its attached children;
 - moving vehicle instances.
@@ -316,7 +316,7 @@ The near plane prevents points too close to or behind the camera from being proj
 `scene_loader_load()` constructs the current demonstration scene in a defined sequence:
 
 1. Initialize the scene and camera.
-2. Add the ground plane and the two crossing street planes.
+2. Add the ground plane and the plus-shaped street mesh.
 3. Add the static buildings around the central streets.
 4. Add the central cube assembly and its three-axis rotation modifiers.
 5. Add six child cubes, attach them to the centerpiece, and configure their own rotation modifiers.

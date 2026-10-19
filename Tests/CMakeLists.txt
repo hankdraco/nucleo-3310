@@ -20,6 +20,7 @@ add_executable(nucleo_3310_tests
     test_car_footprint.c
     test_modifier3d.c
     test_scene3d_agents.c
+    test_city_models.c
     ../Core/Src/scene3d.c
     ../Core/Src/cube_model.c
     ../Core/Src/modifier3d.c
@@ -31,6 +32,7 @@ add_executable(nucleo_3310_tests
     ../Core/Src/camera3d.c
     ../Core/Src/camera_controller.c
     ../Core/Src/geometry3d.c
+    ../Core/Src/city_models.c
     ../Core/Src/matrix4.c
     ../Core/Src/car_trajectory.c
     ../Core/Src/car_modifier.c
