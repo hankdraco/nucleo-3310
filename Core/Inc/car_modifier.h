@@ -16,7 +16,7 @@ typedef enum
 {
     CAR_MODIFIER_STATE_FREE = 0,
     CAR_MODIFIER_STATE_APPROACH_TURN,
-    CAR_MODIFIER_STATE_TRAFFIC_CHECK,
+    CAR_MODIFIER_STATE_BUFFER_ZONE,
     CAR_MODIFIER_STATE_CROSSING,
     CAR_MODIFIER_STATE_DEPARTING,
     CAR_MODIFIER_STATE_SPAWN
@@ -66,6 +66,9 @@ struct car_modifier_context
     car_trajectory_t trajectory;
     car_modifier_state_t state;
     car_modifier_safety_state_t safety_state;
+    /* A nonzero value reserves a conflict-free intersection entry. */
+    uint8_t intersection_reserved;
+    float buffer_zone_length_units;
     float cruise_speed_units_per_second;
     float safety_target_speed_units_per_second;
     float approach_distance_remaining;

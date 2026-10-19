@@ -172,14 +172,14 @@ The states are:
 | `SPAWN` | Retry a candidate route and pose until the spawn footprint is clear |
 | `FREE` | Straight trajectory without route-manoeuvre handling |
 | `APPROACH_TURN` | Travels straight until the selected manoeuvre point |
-| `TRAFFIC_CHECK` | Waits at the intersection entry while another agent is crossing |
+| `BUFFER_ZONE` | Approaches the intersection entry, checks traffic repeatedly, and waits when required |
 | `CROSSING` | Occupies the intersection while turning or travelling straight through |
 | `DEPARTING` | Continues along the outgoing street and checks whether the car has left the city |
 
 For the demo's routed cars, the typical progression is:
 
 ```text
-SPAWN -> APPROACH_TURN -> TRAFFIC_CHECK -> CROSSING -> DEPARTING
+SPAWN -> APPROACH_TURN -> BUFFER_ZONE -> CROSSING -> DEPARTING
                                   |                       |
                                   +-- straight route -----+
                                                           |
@@ -188,7 +188,7 @@ SPAWN -> APPROACH_TURN -> TRAFFIC_CHECK -> CROSSING -> DEPARTING
                                                         SPAWN
 ```
 
-A vehicle reaches `TRAFFIC_CHECK` at the manoeuvre point. It checks the intended path against agents already in `CROSSING`; a conflicting path makes it wait, while a non-conflicting path may enter the occupied intersection. Turning vehicles remain in `CROSSING` until the trajectory completes its quarter-turn. Straight-through vehicles remain in `CROSSING` for a distance of `2 * street_half_width`, then enter `DEPARTING`. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
+A vehicle enters `BUFFER_ZONE` before the manoeuvre point and checks traffic on every update while it approaches the stop line. The zone is sized from the configured maximum speed, a reaction interval, maximum braking deceleration, vehicle half-length, and a clearance margin. This gives a car enough room to brake smoothly if it must yield. Vehicles in the same approach are non-conflicting; for other approaches, the route-conflict table determines whether paths cross.
 
 The relative approach is derived from the original incoming heading, stored in `approach_yaw_rad` so a vehicle's changing yaw during a turn cannot change its identity. “From the left/right” is relative to the candidate vehicle A. The conflict table below lists the other vehicle B's maneuver; `C` means the paths conflict and `—` means they do not. Vehicles from the same approach are always considered non-conflicting.
 
@@ -205,7 +205,9 @@ The relative approach is derived from the original incoming heading, stored in `
 | Straight | Right | C | C | C |
 | Any | Same approach | — | — | — |
 
-The route FSM contains the `TRAFFIC_CHECK` gate. It applies the path-conflict table above; formal right-of-way priority and conflict checks against agents that are only approaching remain out of scope. A separate safety-supervision FSM (`CLEAR`, `FOLLOWING`, and `STOPPED`, with `YIELDING` reserved) checks for the nearest vehicle ahead within 40 units that is travelling in nearly the same direction and overlaps the current lane. It uses the cars' live transforms and projected rectangular footprints; agents in `SPAWN` and crossing traffic are ignored. A vehicle waiting in `TRAFFIC_CHECK` counts as stopped. The controller aims to preserve a 1.5-unit standstill gap and a 1.5-second time headway, limits acceleration to 4 units/s² and braking to 14 units/s², and caps its speed at its route's cruise speed. Its target speed accounts for both the following gap and the braking distance; `FOLLOWING` brakes or accelerates while route progress continues, and `STOPPED` is entered once the vehicle has halted behind a lead. When the lane ahead clears, the car accelerates back toward cruise speed. The pre-update phase only computes the target; movement and speed changes happen later in the normal agent update phase.
+Within `BUFFER_ZONE`, a conflicting vehicle already in `CROSSING` always has priority. For conflicting vehicles also waiting in buffer zones, the right-hand rule decides: a car yields to a conflicting car approaching from its right. If that rule does not resolve the pair, the lower index in the sequentially processed agent array proceeds first. The first check that grants entry inside the car's stopping distance sets the `uint8_t intersection_reserved` flag in its context. This reservation is not a separate FSM state and cannot be revoked by a later arrival with formal priority; other conflicting buffer-zone cars yield until the reserved car enters and clears the intersection. A car that must yield follows a braking speed profile and stops before the line; if traffic permits, it keeps or accelerates toward cruise speed. Turning vehicles remain in `CROSSING` until the trajectory completes its quarter-turn. Straight-through vehicles remain in `CROSSING` for a distance of `2 * street_half_width`, then enter `DEPARTING`. A car that leaves the configured city bounds receives a newly selected spawn pose and route.
+
+A separate safety-supervision FSM (`CLEAR`, `FOLLOWING`, and `STOPPED`, with `YIELDING` reserved) checks for the nearest vehicle ahead within 40 units that is travelling in nearly the same direction and overlaps the current lane. It uses the cars' live transforms and projected rectangular footprints; agents in `SPAWN` and crossing traffic are ignored. A vehicle waiting in `BUFFER_ZONE` counts as stopped for following traffic. The controller aims to preserve a 1.5-unit standstill gap and a 1.5-second time headway, limits acceleration to 4 units/s² and braking to 14 units/s², and caps its speed at its route's cruise speed. Its target speed accounts for both the following gap and the braking distance; `FOLLOWING` brakes or accelerates while route progress continues, and `STOPPED` is entered once the vehicle has halted behind a lead. When the lane ahead clears, the car accelerates back toward cruise speed. The pre-update phase only computes the target; movement and speed changes happen later in the normal agent update phase.
 
 The spawn state is processed even when `dt_seconds == 0`, allowing the loader to initialize the car's transform before the first rendered frame. When a candidate is blocked, the route state and transform remain unchanged and the shared random state advances so the next frame can try another location. When a car leaves the city and respawns during an update, the newly selected route does not consume the leftover time from that update. This avoids immediately advancing the new route by a time interval that belonged to the previous one.
 
@@ -327,7 +329,7 @@ The current design intentionally keeps the simulation small and explicit. Import
 
 - Scene instances, agents, modifiers, and model vertex scratch storage have fixed limits.
 - The scene has separate static-instance and agent arrays, with a shared total capacity. Agent instances are roots and do not currently participate in parent-child hierarchies.
-- Cars are independent agents, but collision avoidance and mutual awareness are not implemented yet.
+- Cars are independent agents with basic same-lane following and intersection conflict handling; full footprint-based collision avoidance across arbitrary trajectories is not implemented.
 - There is no broad-phase spatial index for agent queries.
 - Vehicle visuals are placeholder cubes, independent of the trajectory implementation.
 - The depth/edge pipeline is designed for a tiny monochrome display, not a general-purpose GPU.

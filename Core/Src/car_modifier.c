@@ -13,6 +13,9 @@
 #define CAR_SAFETY_MAX_ACCELERATION_UNITS_PER_SECOND_SQUARED (4.0f)
 #define CAR_SAFETY_MAX_DECELERATION_UNITS_PER_SECOND_SQUARED (14.0f)
 #define CAR_SAFETY_LANE_OVERLAP_TOLERANCE_UNITS (0.25f)
+#define CAR_TRAFFIC_REACTION_TIME_SECONDS (0.20f)
+#define CAR_TRAFFIC_STOP_MARGIN_UNITS (1.0f)
+#define CAR_TRAFFIC_STOP_CLEARANCE_UNITS (0.5f)
 static bool car_modifier_inside_city(const car_trajectory_pose_t *p,const car_modifier_environment_t *e)
 {
  return p&&e&&isfinite(p->position.x)&&isfinite(p->position.z)&&
@@ -123,18 +126,18 @@ static bool car_modifier_routes_conflict(
     }
 }
 
-static bool car_modifier_has_conflicting_crossing_agent(
+static bool car_modifier_has_traffic_blocker(
     const geometry3d_instance_t *self,
     const car_modifier_context_t *context,
-    bool *conflict)
+    bool *blocked)
 {
-    if (self == NULL || context == NULL || conflict == NULL)
+    if (self == NULL || context == NULL || blocked == NULL)
     {
         return false;
     }
 
     const car_modifier_environment_t *environment = context->environment;
-    *conflict = false;
+    *blocked = false;
     if (environment == NULL)
     {
         return true;
@@ -155,23 +158,92 @@ static bool car_modifier_has_conflicting_crossing_agent(
         return false;
     }
 
+    size_t self_index = SIZE_MAX;
     for (size_t i = 0U; i < *environment->agent_count; ++i)
     {
-        const car_modifier_context_t *other_context = &environment->agent_contexts[i];
-        if (&environment->agent_instances[i] != self &&
-            other_context->state == CAR_MODIFIER_STATE_CROSSING &&
-            car_modifier_routes_conflict(
-                context->maneuver,
-                car_modifier_get_relative_approach(
-                    context->approach_yaw_rad,
-                    other_context->approach_yaw_rad),
-                other_context->maneuver))
+        if (&environment->agent_instances[i] == self)
         {
-            *conflict = true;
+            self_index = i;
             break;
         }
     }
+    if (self_index == SIZE_MAX) return false;
+
+    for (size_t i = 0U; i < *environment->agent_count; ++i)
+    {
+        if (i == self_index) continue;
+        const car_modifier_context_t *other_context = &environment->agent_contexts[i];
+        if (other_context->state != CAR_MODIFIER_STATE_CROSSING &&
+            other_context->state != CAR_MODIFIER_STATE_BUFFER_ZONE)
+            continue;
+        if (other_context->intersection_reserved > 1U) return false;
+
+        const car_modifier_relative_approach_t relation =
+            car_modifier_get_relative_approach(
+                context->approach_yaw_rad,
+                other_context->approach_yaw_rad);
+        if (!car_modifier_routes_conflict(
+                context->maneuver, relation, other_context->maneuver))
+            continue;
+
+        if (other_context->state == CAR_MODIFIER_STATE_CROSSING ||
+            other_context->intersection_reserved != 0U)
+        {
+            *blocked = true;
+            return true;
+        }
+
+        if (context->intersection_reserved != 0U)
+        {
+            continue;
+        }
+
+        /* Among unreserved buffer contenders, right-hand priority wins. */
+        if (relation == CAR_MODIFIER_RELATION_RIGHT ||
+            (relation != CAR_MODIFIER_RELATION_LEFT && i < self_index))
+        {
+            *blocked = true;
+            return true;
+        }
+    }
     return true;
+}
+
+static float car_modifier_get_stop_line_offset(void)
+{
+    return CAR_FOOTPRINT_HALF_LENGTH_UNITS +
+           CAR_TRAFFIC_STOP_CLEARANCE_UNITS;
+}
+
+static float car_modifier_get_buffer_zone_length(float maximum_speed)
+{
+    const float stop_line_offset = car_modifier_get_stop_line_offset();
+    return stop_line_offset + CAR_TRAFFIC_STOP_MARGIN_UNITS +
+        maximum_speed * CAR_TRAFFIC_REACTION_TIME_SECONDS +
+        (maximum_speed * maximum_speed) /
+            (2.0f * CAR_SAFETY_MAX_DECELERATION_UNITS_PER_SECOND_SQUARED);
+}
+
+static float car_modifier_get_safe_approach_speed(float distance_to_stop_line)
+{
+    if (distance_to_stop_line <= CAR_TRAFFIC_STOP_MARGIN_UNITS) return 0.0f;
+    const float deceleration =
+        CAR_SAFETY_MAX_DECELERATION_UNITS_PER_SECOND_SQUARED;
+    const float reaction_speed =
+        deceleration * CAR_TRAFFIC_REACTION_TIME_SECONDS;
+    const float available_distance =
+        distance_to_stop_line - CAR_TRAFFIC_STOP_MARGIN_UNITS;
+    return sqrtf(
+        reaction_speed * reaction_speed +
+        2.0f * deceleration * available_distance) - reaction_speed;
+}
+
+static float car_modifier_get_stopping_distance(float speed_units_per_second)
+{
+    return CAR_TRAFFIC_STOP_MARGIN_UNITS +
+        speed_units_per_second * CAR_TRAFFIC_REACTION_TIME_SECONDS +
+        (speed_units_per_second * speed_units_per_second) /
+            (2.0f * CAR_SAFETY_MAX_DECELERATION_UNITS_PER_SECOND_SQUARED);
 }
 
 static bool car_modifier_safety_find_lead(
@@ -241,8 +313,10 @@ static bool car_modifier_safety_find_lead(
         nearest_gap = gap;
         *has_lead = true;
         *gap_units = gap;
-        *lead_speed = (other_context->state == CAR_MODIFIER_STATE_TRAFFIC_CHECK ||
-                       other_context->safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED)
+        *lead_speed = (other_context->state == CAR_MODIFIER_STATE_BUFFER_ZONE &&
+                       other_context->approach_distance_remaining <=
+                           car_modifier_get_stop_line_offset() + CAR_MODIFIER_TOLERANCE) ||
+                      other_context->safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED
             ? 0.0f : other_context->trajectory.speed_units_per_second;
         if (!isfinite(*lead_speed) || *lead_speed < 0.0f) return false;
     }
@@ -420,13 +494,15 @@ static car_modifier_spawn_result_t car_modifier_spawn(
  car_modifier_context_t result={0};
  result.safety_state=CAR_MODIFIER_SAFETY_STATE_CLEAR;
  if(!car_modifier_route_init(&result,&pose,speed,distance,maneuver,radius))return CAR_MODIFIER_SPAWN_ERROR;
+ result.environment=e;
+ result.buffer_zone_length_units=car_modifier_get_buffer_zone_length(e->maximum_speed_units_per_second);
  *committed = rng;
  if (!car_modifier_spawn_location_is_clear(instance, c, &pose))
  {
      return CAR_MODIFIER_SPAWN_BLOCKED;
  }
  result.safety_state=c->safety_state;
- result.environment=e;*c=result;return CAR_MODIFIER_SPAWN_SUCCESS;
+ *c=result;return CAR_MODIFIER_SPAWN_SUCCESS;
 }
 
 bool car_modifier_context_init_spawn(
@@ -562,11 +638,47 @@ bool car_modifier_update(
         remaining_dt = 0.0f;
     }
 
+    if (!spawned && next_context.state == CAR_MODIFIER_STATE_APPROACH_TURN &&
+        next_context.buffer_zone_length_units > 0.0f &&
+        next_context.approach_distance_remaining <=
+            next_context.buffer_zone_length_units)
+    {
+        next_context.state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    }
+
+    float target_speed = next_context.safety_target_speed_units_per_second;
+    bool traffic_blocked = false;
+    if (!spawned && next_context.state == CAR_MODIFIER_STATE_BUFFER_ZONE)
+    {
+        const float current_speed = next_context.trajectory.speed_units_per_second;
+        if (!isfinite(current_speed) || current_speed < 0.0f ||
+            !isfinite(target_speed) || target_speed < 0.0f) return false;
+        if (!car_modifier_has_traffic_blocker(
+                instance, &next_context, &traffic_blocked)) return false;
+        const float distance_to_stop_line = fmaxf(
+            0.0f,
+            next_context.approach_distance_remaining -
+                car_modifier_get_stop_line_offset());
+        if (traffic_blocked)
+        {
+            const float traffic_speed =
+                car_modifier_get_safe_approach_speed(distance_to_stop_line);
+            if (traffic_speed < target_speed) target_speed = traffic_speed;
+        }
+        else if (next_context.cruise_speed_units_per_second < target_speed)
+        {
+            target_speed = next_context.cruise_speed_units_per_second;
+        }
+
+        if (!traffic_blocked && next_context.intersection_reserved == 0U &&
+            distance_to_stop_line <= car_modifier_get_stopping_distance(current_speed))
+            next_context.intersection_reserved = 1U;
+    }
+
     if (!spawned && dt_seconds > 0.0f &&
         next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED)
     {
         const float current_speed = next_context.trajectory.speed_units_per_second;
-        const float target_speed = next_context.safety_target_speed_units_per_second;
         if (!isfinite(current_speed) || current_speed < 0.0f ||
             !isfinite(target_speed) || target_speed < 0.0f) return false;
         if (current_speed == 0.0f && target_speed == 0.0f)
@@ -605,24 +717,16 @@ bool car_modifier_update(
     {
         remaining_dt = 0.0f;
     }
-    else if (next_context.state == CAR_MODIFIER_STATE_TRAFFIC_CHECK)
+    else if (!spawned && next_context.state == CAR_MODIFIER_STATE_BUFFER_ZONE &&
+             dt_seconds == 0.0f && !traffic_blocked &&
+             next_context.approach_distance_remaining <=
+                 car_modifier_get_stop_line_offset() + CAR_MODIFIER_TOLERANCE)
     {
-        bool route_conflict = false;
-        if (!car_modifier_has_conflicting_crossing_agent(
-                instance, &next_context, &route_conflict))
-        {
-            return false;
-        }
-        if (route_conflict)
-        {
-            return true;
-        }
-        if (!car_modifier_begin_maneuver(&next_context))
-        {
-            return false;
-        }
+        next_context.intersection_reserved = 1U;
+        next_context.approach_distance_remaining = 0.0f;
+        if (!car_modifier_begin_maneuver(&next_context)) return false;
+        next_context.intersection_reserved = 0U;
     }
-
     /*
      * A single update can cross more than one state boundary:
      * approach -> turning -> departing. Each state consumes only the time
@@ -674,18 +778,18 @@ bool car_modifier_update(
                 return false;
             }
 
-            const float clamped_distance =
-                (distance_to_turn > 0.0f) ? distance_to_turn : 0.0f;
-            const float time_to_turn =
-                clamped_distance /
+            const float buffer_length = next_context.buffer_zone_length_units;
+            const float distance_to_buffer = fmaxf(
+                0.0f, distance_to_turn - buffer_length);
+            const float time_to_buffer = distance_to_buffer /
                 next_context.trajectory.speed_units_per_second;
 
-            if (!isfinite(time_to_turn))
+            if (!isfinite(time_to_buffer))
             {
                 return false;
             }
 
-            if (remaining_dt < time_to_turn)
+            if (remaining_dt < time_to_buffer)
             {
                 if (!car_trajectory_update(
                         &next_context.trajectory,
@@ -695,7 +799,7 @@ bool car_modifier_update(
                 }
 
                 next_context.approach_distance_remaining =
-                    clamped_distance -
+                    distance_to_turn -
                     next_context.trajectory.speed_units_per_second *
                     remaining_dt;
                 remaining_dt = 0.0f;
@@ -703,38 +807,118 @@ bool car_modifier_update(
             else
             {
                 /*
-                 * Arrive exactly at the turn start, then capture the pivot
-                 * relative to the vehicle's current heading. The pivot stays
-                 * fixed in the trajectory snapshot for the whole quarter-turn.
+                 * Enter the buffer zone before the maneuver point. When no
+                 * buffer is configured, this is the legacy stop-line point.
                  */
                 if (!car_trajectory_update(
                         &next_context.trajectory,
-                        time_to_turn))
+                        time_to_buffer))
                 {
                     return false;
                 }
 
-                next_context.approach_distance_remaining = 0.0f;
-
-                remaining_dt -= time_to_turn;
-
-                next_context.state = CAR_MODIFIER_STATE_TRAFFIC_CHECK;
-                bool route_conflict = false;
-                if (!car_modifier_has_conflicting_crossing_agent(
-                        instance, &next_context, &route_conflict))
+                next_context.approach_distance_remaining = buffer_length;
+                remaining_dt -= time_to_buffer;
+                next_context.state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+                if (buffer_length <= 0.0f)
                 {
-                    return false;
+                    bool traffic_blocked = false;
+                    if (!car_modifier_has_traffic_blocker(
+                            instance, &next_context, &traffic_blocked))
+                        return false;
+                    if (traffic_blocked)
+                    {
+                        remaining_dt = 0.0f;
+                        break;
+                    }
+                    next_context.intersection_reserved = 1U;
+                    next_context.approach_distance_remaining = 0.0f;
+                    if (!car_modifier_begin_maneuver(&next_context)) return false;
+                    next_context.intersection_reserved = 0U;
+                    continue;
                 }
-                if (route_conflict)
+
+                continue;
+            }
+        }
+        else if (next_context.state == CAR_MODIFIER_STATE_BUFFER_ZONE)
+        {
+            bool traffic_blocked = false;
+            if (!car_modifier_has_traffic_blocker(
+                    instance, &next_context, &traffic_blocked)) return false;
+
+            const float stop_line_offset = car_modifier_get_stop_line_offset();
+            const float distance_to_stop_line = fmaxf(
+                0.0f,
+                next_context.approach_distance_remaining - stop_line_offset);
+            const float speed = next_context.trajectory.speed_units_per_second;
+
+            if (traffic_blocked)
+            {
+                if (distance_to_stop_line <= CAR_MODIFIER_TOLERANCE ||
+                    speed <= CAR_MODIFIER_TOLERANCE)
                 {
                     remaining_dt = 0.0f;
                     break;
                 }
 
-                if (!car_modifier_begin_maneuver(&next_context))
-                {
+                const float time_to_stop_line = distance_to_stop_line / speed;
+                const float move_time = (remaining_dt < time_to_stop_line)
+                    ? remaining_dt : time_to_stop_line;
+                if (!car_trajectory_update(&next_context.trajectory, move_time))
                     return false;
+                next_context.approach_distance_remaining -= speed * move_time;
+                if (move_time >= time_to_stop_line)
+                {
+                    next_context.approach_distance_remaining = stop_line_offset;
+                    remaining_dt = 0.0f;
                 }
+                else
+                {
+                    remaining_dt = 0.0f;
+                }
+                break;
+            }
+
+            if (!next_context.intersection_reserved &&
+                distance_to_stop_line <= car_modifier_get_stopping_distance(speed))
+            {
+                next_context.intersection_reserved = 1U;
+            }
+
+            if (speed <= CAR_MODIFIER_TOLERANCE)
+            {
+                remaining_dt = 0.0f;
+                break;
+            }
+
+            const float distance_to_maneuver =
+                next_context.approach_distance_remaining;
+            const float time_to_maneuver = distance_to_maneuver / speed;
+            if (!isfinite(time_to_maneuver)) return false;
+            if (remaining_dt < time_to_maneuver)
+            {
+                if (!car_trajectory_update(
+                        &next_context.trajectory, remaining_dt)) return false;
+                next_context.approach_distance_remaining -= speed * remaining_dt;
+                const float remaining_to_stop_line = fmaxf(
+                    0.0f,
+                    next_context.approach_distance_remaining - stop_line_offset);
+                if (!next_context.intersection_reserved &&
+                    remaining_to_stop_line <= car_modifier_get_stopping_distance(speed))
+                    next_context.intersection_reserved = 1U;
+                remaining_dt = 0.0f;
+            }
+            else
+            {
+                if (!car_trajectory_update(
+                        &next_context.trajectory, time_to_maneuver)) return false;
+                next_context.approach_distance_remaining = 0.0f;
+                remaining_dt -= time_to_maneuver;
+                if (!next_context.intersection_reserved)
+                    next_context.intersection_reserved = 1U;
+                if (!car_modifier_begin_maneuver(&next_context)) return false;
+                next_context.intersection_reserved = 0U;
                 continue;
             }
         }

@@ -221,7 +221,7 @@ static bool test_safety_following_reduces_speed_for_lead_vehicle(void)
     CHECK(contexts[0].trajectory.speed_units_per_second < 8.0f);
     CHECK(agents[0].transform.position.z > follower_pose.position.z);
 
-    contexts[1].state = CAR_MODIFIER_STATE_TRAFFIC_CHECK;
+    contexts[1].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
     agents[1].transform.position.z = 5.5f;
     CHECK(car_modifier_safety_update(&agents[0], 0.1f, &contexts[0]));
     CHECK(contexts[0].safety_target_speed_units_per_second <= 0.001f);
@@ -427,7 +427,7 @@ static bool test_car_route_rejects_invalid_maneuver(void)
     return true;
 }
 
-static bool test_traffic_check_waits_for_turning_agent_to_clear(void)
+static bool test_buffer_zone_waits_for_crossing_agent_to_clear(void)
 {
     geometry3d_instance_t agents[2] = {0};
     car_modifier_context_t contexts[2] = {0};
@@ -452,25 +452,180 @@ static bool test_traffic_check_waits_for_turning_agent_to_clear(void)
     contexts[1].approach_yaw_rad = TEST_HALF_PI_RAD;
 
     CHECK(car_modifier_update(&agents[0], 1.0f, &contexts[0]));
-    CHECK(contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK);
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
     CHECK(test_float_equal(agents[0].transform.position.z, 0.0f));
 
     const float waiting_x = agents[0].transform.position.x;
     const float waiting_z = agents[0].transform.position.z;
     CHECK(car_modifier_update(&agents[0], 0.5f, &contexts[0]));
-    CHECK(contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK);
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
     CHECK(test_float_equal(agents[0].transform.position.x, waiting_x));
     CHECK(test_float_equal(agents[0].transform.position.z, waiting_z));
 
     contexts[1].state = CAR_MODIFIER_STATE_DEPARTING;
-    CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+    CHECK(car_modifier_update(&agents[0], 0.1f, &contexts[0]));
     CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
     CHECK(contexts[0].trajectory.phase == CAR_TRAJECTORY_TURNING);
-    CHECK(test_float_equal(agents[0].transform.position.z, waiting_z));
+    CHECK(agents[0].transform.position.x != waiting_x ||
+          agents[0].transform.position.z != waiting_z);
     return true;
 }
 
-static bool test_traffic_check_enters_turn_without_extra_wait_frame(void)
+static bool test_buffer_zone_right_hand_priority_and_order_tiebreak(void)
+{
+    const car_trajectory_pose_t pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+        .yaw_rad = 0.0f
+    };
+
+    /* A vehicle arriving from our right has priority for a conflicting path. */
+    {
+        geometry3d_instance_t agents[2] = {0};
+        car_modifier_context_t contexts[2] = {0};
+        size_t agent_count = 2U;
+        car_modifier_environment_t environment =
+        {
+            .street_half_width = 5.0f,
+            .agent_instances = agents,
+            .agent_contexts = contexts,
+            .agent_count = &agent_count
+        };
+        CHECK(car_modifier_route_init(&contexts[0], &pose, 2.0f, 0.0f,
+            CAR_MANEUVER_STRAIGHT, 0.0f));
+        contexts[0].environment = &environment;
+        contexts[0].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+        contexts[1].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+        contexts[1].maneuver = CAR_MANEUVER_STRAIGHT;
+        contexts[1].approach_yaw_rad = -TEST_HALF_PI_RAD;
+        CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+        CHECK(contexts[0].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+
+        /* The same conflict arriving from the left yields to agent 0. */
+        contexts[1].approach_yaw_rad = TEST_HALF_PI_RAD;
+        CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+        CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
+    }
+
+    /* Opposite approaches are unresolved by the right-hand rule: array order wins. */
+    {
+        geometry3d_instance_t agents[2] = {0};
+        car_modifier_context_t contexts[2] = {0};
+        size_t agent_count = 2U;
+        car_modifier_environment_t environment =
+        {
+            .street_half_width = 5.0f,
+            .agent_instances = agents,
+            .agent_contexts = contexts,
+            .agent_count = &agent_count
+        };
+        CHECK(car_modifier_route_init(&contexts[0], &pose, 2.0f, 0.0f,
+            CAR_MANEUVER_LEFT, 2.0f));
+        contexts[0].environment = &environment;
+        contexts[0].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+        car_trajectory_pose_t opposite_pose = pose;
+        opposite_pose.yaw_rad = TEST_HALF_PI_RAD * 2.0f;
+        CHECK(car_modifier_route_init(&contexts[1], &opposite_pose, 2.0f, 0.0f,
+            CAR_MANEUVER_LEFT, 2.0f));
+        contexts[1].environment = &environment;
+        contexts[1].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+        contexts[1].maneuver = CAR_MANEUVER_LEFT;
+        contexts[1].approach_yaw_rad = TEST_HALF_PI_RAD * 2.0f;
+        CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+        CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
+        CHECK(contexts[0].intersection_reserved == 0U);
+        CHECK(car_modifier_update(&agents[1], 0.0f, &contexts[1]));
+        CHECK(contexts[1].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+    }
+    return true;
+}
+
+static bool test_intersection_reservation_cannot_be_revoked(void)
+{
+    geometry3d_instance_t agents[2] = {0};
+    car_modifier_context_t contexts[2] = {0};
+    size_t agent_count = 2U;
+    car_modifier_environment_t environment =
+    {
+        .street_half_width = 5.0f,
+        .agent_instances = agents,
+        .agent_contexts = contexts,
+        .agent_count = &agent_count
+    };
+    const car_trajectory_pose_t pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+        .yaw_rad = 0.0f
+    };
+    CHECK(car_modifier_route_init(&contexts[0], &pose, 2.0f, 0.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    contexts[0].environment = &environment;
+    contexts[0].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    contexts[0].intersection_reserved = 1U;
+    contexts[1].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    contexts[1].maneuver = CAR_MANEUVER_STRAIGHT;
+    contexts[1].approach_yaw_rad = -TEST_HALF_PI_RAD;
+    const car_trajectory_pose_t right_pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+        .yaw_rad = -TEST_HALF_PI_RAD
+    };
+    CHECK(car_modifier_route_init(&contexts[1], &right_pose, 2.0f, 0.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    contexts[1].environment = &environment;
+    contexts[1].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    contexts[1].approach_yaw_rad = -TEST_HALF_PI_RAD;
+
+    CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
+    CHECK(car_modifier_update(&agents[1], 0.0f, &contexts[1]));
+    CHECK(contexts[1].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+    return true;
+}
+
+static bool test_buffer_zone_brakes_to_stop_line_for_conflict(void)
+{
+    geometry3d_instance_t agents[2] = {0};
+    car_modifier_context_t contexts[2] = {0};
+    size_t agent_count = 2U;
+    car_modifier_environment_t environment =
+    {
+        .street_half_width = 5.0f,
+        .agent_instances = agents,
+        .agent_contexts = contexts,
+        .agent_count = &agent_count
+    };
+    const float buffer_length = 20.0f;
+    const car_trajectory_pose_t pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = -buffer_length },
+        .yaw_rad = 0.0f
+    };
+    CHECK(car_modifier_route_init(&contexts[0], &pose, 18.0f, buffer_length,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    contexts[0].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    contexts[0].environment = &environment;
+    contexts[0].buffer_zone_length_units = buffer_length;
+    contexts[1].state = CAR_MODIFIER_STATE_CROSSING;
+    contexts[1].maneuver = CAR_MANEUVER_STRAIGHT;
+    contexts[1].approach_yaw_rad = TEST_HALF_PI_RAD;
+
+    for (size_t frame = 0U; frame < 200U; ++frame)
+    {
+        CHECK(car_modifier_update(&agents[0], 0.05f, &contexts[0]));
+    }
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+    CHECK(test_float_equal(contexts[0].trajectory.speed_units_per_second, 0.0f));
+    CHECK(contexts[0].approach_distance_remaining >= 2.5f);
+    CHECK(agents[0].transform.position.z < 0.0f);
+    CHECK(test_float_equal(
+        agents[0].transform.position.z +
+            contexts[0].approach_distance_remaining,
+        0.0f));
+    return true;
+}
+
+static bool test_buffer_zone_enters_turn_without_extra_wait_frame(void)
 {
     geometry3d_instance_t agents[2] = {0};
     car_modifier_context_t contexts[2] = {0};
@@ -500,7 +655,7 @@ static bool test_traffic_check_enters_turn_without_extra_wait_frame(void)
     return true;
 }
 
-static bool test_traffic_check_also_blocks_straight_through_route(void)
+static bool test_buffer_zone_also_blocks_straight_through_route(void)
 {
     geometry3d_instance_t agents[2] = {0};
     car_modifier_context_t contexts[2] = {0};
@@ -525,7 +680,7 @@ static bool test_traffic_check_also_blocks_straight_through_route(void)
     contexts[1].approach_yaw_rad = TEST_HALF_PI_RAD;
 
     CHECK(car_modifier_update(&agents[0], 1.0f, &contexts[0]));
-    CHECK(contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK);
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
     const float stop_line_z = agents[0].transform.position.z;
     CHECK(car_modifier_update(&agents[0], 0.5f, &contexts[0]));
     CHECK(test_float_equal(agents[0].transform.position.z, stop_line_z));
@@ -641,14 +796,14 @@ static bool test_traffic_conflict_matrix(void)
                 CHECK(car_modifier_route_init(
                     &contexts[0], &pose, 1.0f, 0.0f,
                     maneuvers[own_index], radius));
-                contexts[0].state = CAR_MODIFIER_STATE_TRAFFIC_CHECK;
+                contexts[0].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
                 contexts[0].environment = &environment;
                 contexts[1].state = CAR_MODIFIER_STATE_CROSSING;
                 contexts[1].maneuver = maneuvers[other_index];
                 contexts[1].approach_yaw_rad = relative_yaws[relation];
 
                 CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
-                CHECK((contexts[0].state == CAR_MODIFIER_STATE_TRAFFIC_CHECK) ==
+                CHECK((contexts[0].state == CAR_MODIFIER_STATE_BUFFER_ZONE) ==
                       expected[own_index][relation][other_index]);
             }
         }
@@ -671,9 +826,12 @@ bool test_car_modifier_suite(void)
     CHECK(test_car_route_supports_a_different_cardinal_heading());
     CHECK(test_car_route_supports_straight_through_maneuver());
     CHECK(test_car_route_rejects_invalid_maneuver());
-    CHECK(test_traffic_check_waits_for_turning_agent_to_clear());
-    CHECK(test_traffic_check_enters_turn_without_extra_wait_frame());
-    CHECK(test_traffic_check_also_blocks_straight_through_route());
+    CHECK(test_buffer_zone_waits_for_crossing_agent_to_clear());
+    CHECK(test_buffer_zone_right_hand_priority_and_order_tiebreak());
+    CHECK(test_intersection_reservation_cannot_be_revoked());
+    CHECK(test_buffer_zone_brakes_to_stop_line_for_conflict());
+    CHECK(test_buffer_zone_enters_turn_without_extra_wait_frame());
+    CHECK(test_buffer_zone_also_blocks_straight_through_route());
     CHECK(test_straight_route_crosses_intersection_before_departing());
     CHECK(test_traffic_conflict_matrix());
 
