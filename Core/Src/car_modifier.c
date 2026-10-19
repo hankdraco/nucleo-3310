@@ -126,6 +126,60 @@ static bool car_modifier_routes_conflict(
     }
 }
 
+static bool car_modifier_is_frontmost_buffer_agent(
+    const car_modifier_environment_t *environment,
+    size_t agent_index,
+    const car_modifier_context_t *agent_override)
+{
+    if (environment == NULL || environment->agent_contexts == NULL ||
+        environment->agent_count == NULL ||
+        *environment->agent_count > SCENE3D_MAX_AGENTS ||
+        agent_index >= *environment->agent_count)
+    {
+        return false;
+    }
+
+    const car_modifier_context_t *agent = agent_override != NULL
+        ? agent_override : &environment->agent_contexts[agent_index];
+    if (agent->state != CAR_MODIFIER_STATE_BUFFER_ZONE) return false;
+
+    for (size_t i = 0U; i < *environment->agent_count; ++i)
+    {
+        if (i == agent_index) continue;
+        const car_modifier_context_t *other =
+            &environment->agent_contexts[i];
+        if (other->state != CAR_MODIFIER_STATE_BUFFER_ZONE ||
+            car_modifier_get_relative_approach(
+                agent->approach_yaw_rad, other->approach_yaw_rad) !=
+                CAR_MODIFIER_RELATION_SAME)
+        {
+            continue;
+        }
+
+        if (other->approach_distance_remaining <
+                agent->approach_distance_remaining - CAR_MODIFIER_TOLERANCE ||
+            (fabsf(other->approach_distance_remaining -
+                   agent->approach_distance_remaining) <=
+                 CAR_MODIFIER_TOLERANCE && i < agent_index))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool car_modifier_has_active_reservation(
+    const car_modifier_environment_t *environment,
+    size_t agent_index)
+{
+    const car_modifier_context_t *context =
+        &environment->agent_contexts[agent_index];
+    return context->intersection_reserved != 0U &&
+           car_modifier_is_frontmost_buffer_agent(
+               environment, agent_index, NULL) &&
+           context->safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED;
+}
+
 static bool car_modifier_is_deadlock_winner(
     const car_modifier_environment_t *environment,
     size_t self_index,
@@ -149,17 +203,18 @@ static bool car_modifier_is_deadlock_winner(
     {
         const car_modifier_context_t *context =
             &environment->agent_contexts[i];
-        if (context->state == CAR_MODIFIER_STATE_CROSSING ||
-            context->intersection_reserved != 0U)
+        if (context->state == CAR_MODIFIER_STATE_CROSSING)
         {
             return false;
         }
-        if (context->state != CAR_MODIFIER_STATE_BUFFER_ZONE) continue;
+        if (context->state != CAR_MODIFIER_STATE_BUFFER_ZONE ||
+            !car_modifier_is_frontmost_buffer_agent(environment, i, NULL)) continue;
 
         for (size_t j = 0U; j < count; ++j)
         {
             if (i == j || environment->agent_contexts[j].state !=
-                              CAR_MODIFIER_STATE_BUFFER_ZONE)
+                              CAR_MODIFIER_STATE_BUFFER_ZONE ||
+                !car_modifier_is_frontmost_buffer_agent(environment, j, NULL))
             {
                 continue;
             }
@@ -176,7 +231,8 @@ static bool car_modifier_is_deadlock_winner(
                 continue;
             }
 
-            if (relation == CAR_MODIFIER_RELATION_RIGHT ||
+            if (car_modifier_has_active_reservation(environment, j) ||
+                relation == CAR_MODIFIER_RELATION_RIGHT ||
                 (relation != CAR_MODIFIER_RELATION_LEFT && j < i))
             {
                 wait_edges[i] |= (uint16_t)((uint16_t)1U << j);
@@ -252,6 +308,7 @@ static bool car_modifier_has_traffic_blocker(
 
     size_t self_index = SIZE_MAX;
     uint16_t priority_blockers = 0U;
+    bool hard_blocked = false;
     for (size_t i = 0U; i < *environment->agent_count; ++i)
     {
         if (&environment->agent_instances[i] == self)
@@ -262,6 +319,14 @@ static bool car_modifier_has_traffic_blocker(
     }
     if (self_index == SIZE_MAX) return false;
 
+    if (context->state == CAR_MODIFIER_STATE_BUFFER_ZONE &&
+        !car_modifier_is_frontmost_buffer_agent(
+            environment, self_index, context))
+    {
+        *blocked = true;
+        return true;
+    }
+
     for (size_t i = 0U; i < *environment->agent_count; ++i)
     {
         if (i == self_index) continue;
@@ -270,6 +335,9 @@ static bool car_modifier_has_traffic_blocker(
             other_context->state != CAR_MODIFIER_STATE_BUFFER_ZONE)
             continue;
         if (other_context->intersection_reserved > 1U) return false;
+        if (other_context->state == CAR_MODIFIER_STATE_BUFFER_ZONE &&
+            !car_modifier_is_frontmost_buffer_agent(environment, i, NULL))
+            continue;
 
         const car_modifier_relative_approach_t relation =
             car_modifier_get_relative_approach(
@@ -280,10 +348,10 @@ static bool car_modifier_has_traffic_blocker(
             continue;
 
         if (other_context->state == CAR_MODIFIER_STATE_CROSSING ||
-            other_context->intersection_reserved != 0U)
+            car_modifier_has_active_reservation(environment, i))
         {
-            *blocked = true;
-            return true;
+            hard_blocked = true;
+            continue;
         }
 
         if (context->intersection_reserved != 0U)
@@ -307,7 +375,7 @@ static bool car_modifier_has_traffic_blocker(
         /* A deadlock winner ignores only the blockers in its own cycle. */
         priority_blockers &= (uint16_t)~deadlock_group_mask;
     }
-    *blocked = priority_blockers != 0U;
+    *blocked = hard_blocked || priority_blockers != 0U;
     return true;
 }
 
@@ -719,6 +787,30 @@ bool car_modifier_update(
         return false;
     }
 
+    bool release_reservation =
+        next_context.safety_state == CAR_MODIFIER_SAFETY_STATE_STOPPED;
+    if (!release_reservation && next_context.environment != NULL &&
+        next_context.environment->agent_instances != NULL &&
+        next_context.environment->agent_count != NULL &&
+        *next_context.environment->agent_count <= SCENE3D_MAX_AGENTS)
+    {
+        for (size_t i = 0U; i < *next_context.environment->agent_count; ++i)
+        {
+            if (&next_context.environment->agent_instances[i] == instance)
+            {
+                release_reservation =
+                    !car_modifier_is_frontmost_buffer_agent(
+                        next_context.environment, i, &next_context);
+                break;
+            }
+        }
+    }
+    if (next_context.state == CAR_MODIFIER_STATE_BUFFER_ZONE &&
+        next_context.intersection_reserved != 0U && release_reservation)
+    {
+        next_context.intersection_reserved = 0U;
+    }
+
     float remaining_dt = dt_seconds;
     bool spawned = false;
     uint32_t next_random_state = 0U;
@@ -772,7 +864,9 @@ bool car_modifier_update(
             target_speed = next_context.cruise_speed_units_per_second;
         }
 
-        if (!traffic_blocked && next_context.intersection_reserved == 0U &&
+        if (!traffic_blocked &&
+            next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED &&
+            next_context.intersection_reserved == 0U &&
             distance_to_stop_line <= car_modifier_get_stopping_distance(current_speed))
             next_context.intersection_reserved = 1U;
     }
@@ -986,6 +1080,7 @@ bool car_modifier_update(
             }
 
             if (!next_context.intersection_reserved &&
+                next_context.safety_state != CAR_MODIFIER_SAFETY_STATE_STOPPED &&
                 distance_to_stop_line <= car_modifier_get_stopping_distance(speed))
             {
                 next_context.intersection_reserved = 1U;

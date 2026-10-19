@@ -630,6 +630,126 @@ static bool test_four_way_deadlock_selects_one_deterministic_winner(void)
     return true;
 }
 
+static bool test_three_way_deadlock_with_one_free_approach(void)
+{
+    geometry3d_instance_t agents[3] = {0};
+    car_modifier_context_t contexts[3] = {0};
+    size_t agent_count = 3U;
+    car_modifier_environment_t environment =
+    {
+        .street_half_width = 5.0f,
+        .agent_instances = agents,
+        .agent_contexts = contexts,
+        .agent_count = &agent_count
+    };
+    const float yaws[3] =
+    {
+        TEST_HALF_PI_RAD * 2.0f,
+        TEST_HALF_PI_RAD,
+        0.0f
+    };
+
+    for (size_t i = 0U; i < agent_count; ++i)
+    {
+        const car_trajectory_pose_t pose =
+        {
+            .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+            .yaw_rad = yaws[i]
+        };
+        CHECK(car_modifier_route_init(&contexts[i], &pose, 2.0f, 0.0f,
+            CAR_MANEUVER_LEFT, 2.0f));
+        contexts[i].environment = &environment;
+        contexts[i].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    }
+
+    /* Opposite left turns close a cycle across the three occupied approaches. */
+    CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_CROSSING);
+    return true;
+}
+
+static bool test_stopped_buffer_car_releases_intersection_reservation(void)
+{
+    geometry3d_instance_t agent = {0};
+    car_modifier_context_t context = {0};
+    size_t agent_count = 1U;
+    car_modifier_environment_t environment =
+    {
+        .street_half_width = 5.0f,
+        .agent_instances = &agent,
+        .agent_contexts = &context,
+        .agent_count = &agent_count
+    };
+    const car_trajectory_pose_t pose =
+    {
+        .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+        .yaw_rad = 0.0f
+    };
+    CHECK(car_modifier_route_init(&context, &pose, 2.0f, 0.0f,
+        CAR_MANEUVER_STRAIGHT, 0.0f));
+    context.environment = &environment;
+    context.state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+    context.safety_state = CAR_MODIFIER_SAFETY_STATE_STOPPED;
+    context.intersection_reserved = 1U;
+
+    CHECK(car_modifier_update(&agent, 0.0f, &context));
+    CHECK(context.state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+    CHECK(context.intersection_reserved == 0U);
+    return true;
+}
+
+static bool test_deadlock_uses_only_frontmost_car_per_approach(void)
+{
+    geometry3d_instance_t agents[8] = {0};
+    car_modifier_context_t contexts[8] = {0};
+    size_t agent_count = 8U;
+    car_modifier_environment_t environment =
+    {
+        .street_half_width = 5.0f,
+        .agent_instances = agents,
+        .agent_contexts = contexts,
+        .agent_count = &agent_count
+    };
+    const float approach_yaws[4] =
+    {
+        0.0f,
+        TEST_HALF_PI_RAD,
+        TEST_HALF_PI_RAD * 2.0f,
+        -TEST_HALF_PI_RAD
+    };
+
+    for (size_t approach = 0U; approach < 4U; ++approach)
+    {
+        for (size_t queue_position = 0U; queue_position < 2U; ++queue_position)
+        {
+            const size_t i = approach * 2U + queue_position;
+            const car_trajectory_pose_t pose =
+            {
+                .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+                .yaw_rad = approach_yaws[approach]
+            };
+            CHECK(car_modifier_route_init(&contexts[i], &pose, 5.0f, 0.0f,
+                CAR_MANEUVER_STRAIGHT, 0.0f));
+            contexts[i].environment = &environment;
+            contexts[i].state = CAR_MODIFIER_STATE_BUFFER_ZONE;
+            contexts[i].safety_state = CAR_MODIFIER_SAFETY_STATE_CLEAR;
+            contexts[i].safety_target_speed_units_per_second = 5.0f;
+            contexts[i].approach_distance_remaining =
+                queue_position == 0U ? 4.5f : 0.0f;
+        }
+    }
+
+    /* Rear car 0 cannot win the cycle or reserve ahead of its own leader. */
+    CHECK(car_modifier_update(&agents[0], 0.0f, &contexts[0]));
+    CHECK(contexts[0].state == CAR_MODIFIER_STATE_BUFFER_ZONE);
+    CHECK(contexts[0].intersection_reserved == 0U);
+
+    /* Only the four front cars form the cycle; their first car breaks it. */
+    CHECK(car_modifier_update(&agents[1], 0.0f, &contexts[1]));
+    CHECK(contexts[1].state == CAR_MODIFIER_STATE_CROSSING);
+    return true;
+}
+
 static bool test_stopped_turning_car_waits_for_positive_dt_to_start_turn(void)
 {
     const car_trajectory_pose_t pose =
@@ -903,6 +1023,9 @@ bool test_car_modifier_suite(void)
     CHECK(test_buffer_zone_right_hand_priority_and_order_tiebreak());
     CHECK(test_intersection_reservation_cannot_be_revoked());
     CHECK(test_four_way_deadlock_selects_one_deterministic_winner());
+    CHECK(test_three_way_deadlock_with_one_free_approach());
+    CHECK(test_stopped_buffer_car_releases_intersection_reservation());
+    CHECK(test_deadlock_uses_only_frontmost_car_per_approach());
     CHECK(test_stopped_turning_car_waits_for_positive_dt_to_start_turn());
     CHECK(test_buffer_zone_brakes_to_stop_line_for_conflict());
     CHECK(test_buffer_zone_enters_turn_without_extra_wait_frame());

@@ -31,7 +31,10 @@ static bool test_car_spawn_state_is_processed_with_zero_dt(void)
 {
     car_modifier_environment_t environment = make_test_environment(0x12345678U);
     car_modifier_context_t context = {0};
-    geometry3d_instance_t instance = {0};
+    geometry3d_instance_t instance =
+    {
+        .transform.position = { .y = -1000.0f }
+    };
 
     CHECK(car_modifier_context_init_spawn(&context, &environment));
     CHECK(context.state == CAR_MODIFIER_STATE_SPAWN);
@@ -78,6 +81,7 @@ static bool test_car_spawn_state_is_processed_with_zero_dt(void)
     CHECK(test_float_equal(
         instance.transform.position.y,
         context.trajectory.pose.position.y));
+    CHECK(test_float_equal(instance.transform.position.y, 1.0f));
     CHECK(test_float_equal(
         instance.transform.position.z,
         context.trajectory.pose.position.z));
@@ -174,7 +178,7 @@ static bool test_blocked_spawn_retries_without_moving_car(void)
     car_modifier_context_t waiting_context = {0};
     geometry3d_instance_t waiting_instance =
     {
-        .transform.position = { .x = -50.0f, .y = 3.0f, .z = 75.0f },
+        .transform.position = { .x = -50.0f, .y = -1000.0f, .z = 75.0f },
         .transform.rotation_rad = { .y = 0.25f }
     };
     CHECK(car_modifier_context_init_spawn(&waiting_context, &environment));
@@ -184,7 +188,7 @@ static bool test_blocked_spawn_retries_without_moving_car(void)
     CHECK(waiting_context.state == CAR_MODIFIER_STATE_SPAWN);
     CHECK(waiting_instance.transform.position.x == -50.0f);
     CHECK(waiting_instance.transform.position.z == 75.0f);
-    CHECK(waiting_instance.transform.position.y == 3.0f);
+    CHECK(waiting_instance.transform.position.y == -1000.0f);
     CHECK(waiting_instance.transform.rotation_rad.y == 0.25f);
     CHECK(environment.random_state != initial_random_state);
 

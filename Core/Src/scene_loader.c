@@ -303,8 +303,8 @@ static bool scene_loader_add_car(
 
     if (!car_modifier_context_init_spawn(car_context, car_environment)) return false;
     /*
-     * A small cube is a temporary visual proxy for the car. The spawn
-     * state initializes its transform before the first rendered frame.
+     * A small cube is a temporary visual proxy for the car. Keep it hidden
+     * below the city until SPAWN finds a clear location and sets its transform.
      * The trajectory and custom modifier do not depend on this model.
      */
     geometry3d_instance_t car =
@@ -312,7 +312,7 @@ static bool scene_loader_add_car(
         .model = &geometry3d_cube_model,
         .transform =
         {
-            .position = { .x = 0.0f, .y = 1.0f, .z = 0.0f },
+            .position = { .x = 0.0f, .y = -1000.0f, .z = 0.0f },
             .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
             .scale =
             {
