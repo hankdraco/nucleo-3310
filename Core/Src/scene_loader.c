@@ -2,6 +2,8 @@
 
 #include "scene_loader.h"
 #include "cube_model.h"
+#include "car_modifier.h"
+#include "car_footprint.h"
 #include "display.h"
 #include "modifier3d.h"
 #include "city_models.h"
@@ -16,6 +18,7 @@
 #define SCENE_LOADER_CITY_QUADRANTS   4U
 
 #define SCENE_LOADER_ATTACHMENT_COUNT   6U
+
 
 static const geometry3d_vector3_t
     scene_loader_attachment_positions[
@@ -280,19 +283,89 @@ static bool scene_loader_add_city_buildings(scene3d_t *scene)
     return true;
 }
 
+
+/*
+ * Add one car instance to the central north-south street.
+ *
+ * The behavior context belongs to the caller (app_t), not this function's
+ * stack. scene3d_add_agent_instance() copies the instance and its context pointer,
+ * so the caller-owned context must remain alive while the scene is updated.
+ */
+static bool scene_loader_add_car(
+    scene3d_t *scene,
+    car_modifier_context_t *car_context,
+    car_modifier_environment_t *car_environment)
+{
+    if (scene == NULL || car_context == NULL)
+    {
+        return false;
+    }
+
+    if (!car_modifier_context_init_spawn(car_context, car_environment)) return false;
+    /*
+     * A small cube is a temporary visual proxy for the car. Keep it hidden
+     * below the city until SPAWN finds a clear location and sets its transform.
+     * The trajectory and custom modifier do not depend on this model.
+     */
+    geometry3d_instance_t car =
+    {
+        .model = &geometry3d_cube_model,
+        .transform =
+        {
+            .position = { .x = 0.0f, .y = -1000.0f, .z = 0.0f },
+            .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
+            .scale =
+            {
+                .x = CAR_FOOTPRINT_HALF_WIDTH_UNITS,
+                .y = 1.00f,
+                .z = CAR_FOOTPRINT_HALF_LENGTH_UNITS
+            }
+        }
+    };
+
+    if (!car_modifier_update(&car, 0.0f, car_context)) return false;
+
+    const modifier3d_config_t car_behavior =
+    {
+        .target = MODIFIER3D_TARGET_ALL,
+        .behavior = MODIFIER3D_BEHAVIOR_CUSTOM,
+        .custom_fn = car_modifier_update,
+        .custom_pre_update_fn = car_modifier_safety_update,
+        .context = car_context
+    };
+
+    if (!modifier3d_add(&car, &car_behavior))
+    {
+        return false;
+    }
+
+    return scene3d_add_agent_instance(scene, &car);
+}
+
 bool scene_loader_load(
     scene3d_t *scene,
     camera3d_t *camera,
-    projection_perspective_t *projection)
+    projection_perspective_t *projection,
+    car_modifier_context_t *car_contexts,
+    size_t car_count,
+    car_modifier_environment_t *car_environment)
 {
     if (scene == NULL ||
         camera == NULL ||
-        projection == NULL)
+        projection == NULL ||
+        car_contexts == NULL ||
+        car_count == 0U ||
+        car_count > SCENE3D_MAX_AGENTS ||
+        car_environment == NULL)
     {
         return false;
     }
 
     scene3d_init(scene);
+
+    car_environment->agent_instances = scene->agent_instances;
+    car_environment->agent_contexts = car_contexts;
+    car_environment->agent_count = &scene->agent_count;
 
     if (!camera3d_init(camera))
     {
@@ -322,36 +395,21 @@ bool scene_loader_load(
     };
 
     /*
-     * 2. Two crossing streets.
-     * The slightly elevated outlines remain distinct from the ground.
+     * 2. One plus-shaped street mesh covering the same XZ footprint as the
+     * former crossing rectangles. Its single surface avoids overlap at the
+     * intersection and sits just above the ground plane.
      */
-    const geometry3d_instance_t street_x =
+    const geometry3d_instance_t streets =
     {
-        .model = &geometry3d_plane_model,
-        .transform =
-        {
-            .position = { .x = 0.0f, .y = 0.02f, .z = 0.0f },
-            .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
-            .scale =
-            {
-                .x = SCENE_LOADER_CITY_HALF_EXTENT *
-                    SCENE_LOADER_CITY_SCALE,
-                .y = 1.0f,
-                .z = 1.6f * SCENE_LOADER_CITY_SCALE
-            }
-        }
-    };
-
-    const geometry3d_instance_t street_z =
-    {
-        .model = &geometry3d_plane_model,
+        .model = &geometry3d_plus_road_model,
         .transform =
         {
             .position = { .x = 0.0f, .y = 0.025f, .z = 0.0f },
             .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
             .scale =
             {
-                .x = 1.6f * SCENE_LOADER_CITY_SCALE,
+                .x = SCENE_LOADER_CITY_HALF_EXTENT *
+                    SCENE_LOADER_CITY_SCALE,
                 .y = 1.0f,
                 .z = SCENE_LOADER_CITY_HALF_EXTENT *
                     SCENE_LOADER_CITY_SCALE
@@ -360,8 +418,7 @@ bool scene_loader_load(
     };
 
     if (!scene3d_add_instance(scene, &ground) ||
-        !scene3d_add_instance(scene, &street_x) ||
-        !scene3d_add_instance(scene, &street_z))
+        !scene3d_add_instance(scene, &streets))
     {
         goto fail;
     }
@@ -498,7 +555,22 @@ bool scene_loader_load(
     }
 
     /*
-     * 6. Elevated oblique view of the city and central intersection.
+     * 6. Moving cars. Each instance owns a distinct, caller-managed
+     * modifier context, while all cars share the same environment and RNG.
+     */
+    for (size_t i = 0U; i < car_count; ++i)
+    {
+        if (!scene_loader_add_car(
+                scene,
+                &car_contexts[i],
+                car_environment))
+        {
+            goto fail;
+        }
+    }
+
+    /*
+     * 7. Elevated oblique view of the city and central intersection.
      */
     // camera->position.x = 36.0f;
     // camera->position.y = 52.0f;

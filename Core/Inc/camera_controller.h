@@ -2,6 +2,7 @@
 #define CAMERA_CONTROLLER_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "camera3d.h"
 #include "input_types.h"
@@ -20,6 +21,8 @@ typedef struct
     float move_speed_units_per_second;
     float mouse_sensitivity_rad_per_count;
 
+    bool follow_mode;
+    bool follow_camera_initialized;
     bool initialized;
 
 } camera_controller_t;
@@ -48,5 +51,20 @@ bool camera_controller_update(
     camera3d_t *camera,
     const input_snapshot_t *input,
     float dt_seconds);
+
+/* Switch between the existing free-fly controls and vehicle follow mode. */
+bool camera_controller_set_follow_mode(
+    camera_controller_t *controller,
+    camera3d_t *camera,
+    bool enabled);
+
+/* Position the camera above and behind a vehicle, looking ahead along its route. */
+bool camera_controller_follow_vehicle(
+    camera_controller_t *controller,
+    camera3d_t *camera,
+    const geometry3d_vector3_t *vehicle_position,
+    float vehicle_yaw_rad,
+    float dt_seconds,
+    bool snap_to_vehicle);
 
 #endif /* CAMERA_CONTROLLER_H */

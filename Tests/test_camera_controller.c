@@ -282,6 +282,87 @@ static bool test_camera_controller_rejects_negative_dt(void)
     return true;
 }
 
+static bool test_camera_controller_follows_vehicle_pose(void)
+{
+    camera3d_t camera;
+    camera_controller_t controller;
+    if (!initialize_origin_camera(&camera, &controller) ||
+        !camera_controller_set_follow_mode(&controller, &camera, true))
+    {
+        return false;
+    }
+
+    const geometry3d_vector3_t vehicle_position =
+    {
+        .x = 10.0f, .y = 2.0f, .z = 20.0f
+    };
+    if (!camera_controller_follow_vehicle(
+            &controller, &camera, &vehicle_position, 0.0f, 0.016f, true))
+    {
+        return false;
+    }
+
+    if (fabsf(camera.position.x - 10.0f) > CAMERA_CONTROLLER_TEST_TOLERANCE ||
+        fabsf(camera.position.y - 8.0f) > CAMERA_CONTROLLER_TEST_TOLERANCE ||
+        fabsf(camera.position.z - 12.0f) > CAMERA_CONTROLLER_TEST_TOLERANCE ||
+        !camera.target_enabled ||
+        fabsf(camera.target.x - 10.0f) > CAMERA_CONTROLLER_TEST_TOLERANCE ||
+        fabsf(camera.target.y - 3.0f) > CAMERA_CONTROLLER_TEST_TOLERANCE ||
+        fabsf(camera.target.z - 30.0f) > CAMERA_CONTROLLER_TEST_TOLERANCE)
+    {
+        return false;
+    }
+
+    const geometry3d_vector3_t next_position =
+    {
+        .x = 12.0f, .y = 2.0f, .z = 20.0f
+    };
+    if (!camera_controller_follow_vehicle(
+            &controller, &camera, &next_position, 1.57079632679f,
+            0.016f, false))
+    {
+        return false;
+    }
+
+    if (camera.position.x >= 10.0f || camera.position.z <= 12.0f ||
+        camera.target.x <= 12.0f)
+    {
+        return false;
+    }
+
+    input_snapshot_t input = {0};
+    input.key_mask = INPUT_KEY_FORWARD;
+    if (!camera_controller_update(&controller, &camera, &input, 0.5f))
+    {
+        return false;
+    }
+    return true;
+}
+
+static bool test_camera_controller_returns_to_free_fly(void)
+{
+    camera3d_t camera;
+    camera_controller_t controller;
+    if (!initialize_origin_camera(&camera, &controller) ||
+        !camera_controller_set_follow_mode(&controller, &camera, true))
+    {
+        return false;
+    }
+
+    const geometry3d_vector3_t position = { .x = 0.0f, .y = 0.0f, .z = 0.0f };
+    if (!camera_controller_follow_vehicle(
+            &controller, &camera, &position, 0.0f, 0.016f, true) ||
+        !camera_controller_set_follow_mode(&controller, &camera, false) ||
+        controller.follow_mode || camera.target_enabled)
+    {
+        return false;
+    }
+
+    input_snapshot_t input = { .key_mask = INPUT_KEY_FORWARD };
+    return camera_controller_update(&controller, &camera, &input, 0.5f) &&
+           camera.position.z != 0.0f;
+}
+
 bool test_camera_controller_suite(void)
 {
     if (!test_camera_controller_initializes_from_look_at())
@@ -300,6 +381,12 @@ bool test_camera_controller_suite(void)
         return false;
 
     if (!test_camera_controller_rejects_negative_dt())
+        return false;
+
+    if (!test_camera_controller_follows_vehicle_pose())
+        return false;
+
+    if (!test_camera_controller_returns_to_free_fly())
         return false;
 
     return true;

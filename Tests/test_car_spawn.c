@@ -1,0 +1,213 @@
+#include "car_modifier.h"
+#include "car_footprint.h"
+
+#include <math.h>
+#include <stdint.h>
+
+#include "test_common.h"
+
+#define TEST_TOLERANCE (0.0001f)
+
+static bool test_float_equal(float actual, float expected)
+{
+    return fabsf(actual - expected) <= TEST_TOLERANCE;
+}
+
+static car_modifier_environment_t make_test_environment(uint32_t seed)
+{
+    return (car_modifier_environment_t)
+    {
+        .city_half_extent_x = 160.0f,
+        .city_half_extent_z = 160.0f,
+        .street_half_width = 12.8f,
+        .lane_edge_offset = 7.0f,
+        .minimum_speed_units_per_second = 12.0f,
+        .maximum_speed_units_per_second = 18.0f,
+        .random_state = seed
+    };
+}
+
+static bool test_car_spawn_state_is_processed_with_zero_dt(void)
+{
+    car_modifier_environment_t environment = make_test_environment(0x12345678U);
+    car_modifier_context_t context = {0};
+    geometry3d_instance_t instance =
+    {
+        .transform.position = { .y = -1000.0f }
+    };
+
+    CHECK(car_modifier_context_init_spawn(&context, &environment));
+    CHECK(context.state == CAR_MODIFIER_STATE_SPAWN);
+    CHECK(context.environment == &environment);
+
+    /* SPAWN is a one-shot state transition, not elapsed-time simulation. */
+    CHECK(car_modifier_update(&instance, 0.0f, &context));
+
+    CHECK(context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+    CHECK(context.environment == &environment);
+    CHECK(context.trajectory.speed_units_per_second >=
+          environment.minimum_speed_units_per_second);
+    CHECK(context.trajectory.speed_units_per_second <=
+          environment.maximum_speed_units_per_second);
+    if (context.maneuver == CAR_MANEUVER_RIGHT)
+    {
+        CHECK(test_float_equal(
+            context.turn_radius, environment.lane_edge_offset));
+    }
+    else if (context.maneuver == CAR_MANEUVER_LEFT)
+    {
+        CHECK(test_float_equal(
+            context.turn_radius,
+            2.0f * environment.street_half_width -
+                environment.lane_edge_offset));
+    }
+    else
+    {
+        CHECK(context.maneuver == CAR_MANEUVER_STRAIGHT);
+        CHECK(test_float_equal(context.turn_radius, 0.0f));
+    }
+    CHECK(context.trajectory.pose.position.x >=
+          -environment.city_half_extent_x);
+    CHECK(context.trajectory.pose.position.x <=
+          environment.city_half_extent_x);
+    CHECK(context.trajectory.pose.position.z >=
+          -environment.city_half_extent_z);
+    CHECK(context.trajectory.pose.position.z <=
+          environment.city_half_extent_z);
+
+    CHECK(test_float_equal(
+        instance.transform.position.x,
+        context.trajectory.pose.position.x));
+    CHECK(test_float_equal(
+        instance.transform.position.y,
+        context.trajectory.pose.position.y));
+    CHECK(test_float_equal(instance.transform.position.y, 1.0f));
+    CHECK(test_float_equal(
+        instance.transform.position.z,
+        context.trajectory.pose.position.z));
+    CHECK(test_float_equal(
+        instance.transform.rotation_rad.y,
+        context.trajectory.pose.yaw_rad));
+
+    return true;
+}
+
+static bool test_car_spawn_state_is_visible_after_leaving_city(void)
+{
+    car_modifier_environment_t environment_a = make_test_environment(0xA5A5A5A5U);
+    car_modifier_environment_t environment_b = make_test_environment(0xA5A5A5A5U);
+    car_modifier_context_t context_a = {0};
+    car_modifier_context_t context_b = {0};
+    geometry3d_instance_t instance_a = {0};
+    geometry3d_instance_t instance_b = {0};
+
+    CHECK(car_modifier_context_init_spawn(&context_a, &environment_a));
+    CHECK(car_modifier_context_init_spawn(&context_b, &environment_b));
+
+    /* Bring both independently seeded cars through their first spawn. */
+    CHECK(car_modifier_update(&instance_a, 0.0f, &context_a));
+    CHECK(car_modifier_update(&instance_b, 0.0f, &context_b));
+
+    /* Leave the city and expose SPAWN for one complete update. */
+    context_a.state = CAR_MODIFIER_STATE_DEPARTING;
+    context_a.trajectory.pose.position.x =
+        environment_a.city_half_extent_x + 1.0f;
+    context_b.state = CAR_MODIFIER_STATE_SPAWN;
+
+    CHECK(car_modifier_update(&instance_a, 10.0f, &context_a));
+    CHECK(context_a.state == CAR_MODIFIER_STATE_SPAWN);
+    CHECK(instance_a.transform.position.x > environment_a.city_half_extent_x);
+
+    /* The previous dt was not applied to a replacement route. */
+    CHECK(car_modifier_update(&instance_b, 0.0f, &context_b));
+    CHECK(context_b.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+    CHECK(car_modifier_update(&instance_a, 0.0f, &context_a));
+
+    CHECK(context_a.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+
+    CHECK(test_float_equal(
+        context_a.trajectory.pose.position.x,
+        context_b.trajectory.pose.position.x));
+    CHECK(test_float_equal(
+        context_a.trajectory.pose.position.y,
+        context_b.trajectory.pose.position.y));
+    CHECK(test_float_equal(
+        context_a.trajectory.pose.position.z,
+        context_b.trajectory.pose.position.z));
+    CHECK(test_float_equal(
+        context_a.trajectory.pose.yaw_rad,
+        context_b.trajectory.pose.yaw_rad));
+    CHECK(test_float_equal(
+        instance_a.transform.position.x,
+        instance_b.transform.position.x));
+    CHECK(test_float_equal(
+        instance_a.transform.position.z,
+        instance_b.transform.position.z));
+
+    return true;
+}
+
+static bool test_blocked_spawn_retries_without_moving_car(void)
+{
+    car_modifier_environment_t probe_environment = make_test_environment(0x31415926U);
+    car_modifier_context_t probe_context = {0};
+    geometry3d_instance_t probe_instance = {0};
+    CHECK(car_modifier_context_init_spawn(&probe_context, &probe_environment));
+    CHECK(car_modifier_update(&probe_instance, 0.0f, &probe_context));
+
+    geometry3d_instance_t other_instance =
+    {
+        .transform =
+        {
+            .position = { probe_instance.transform.position.x,
+                          probe_instance.transform.position.y,
+                          probe_instance.transform.position.z },
+            .rotation_rad = { .y = probe_instance.transform.rotation_rad.y },
+            .scale = { CAR_FOOTPRINT_HALF_WIDTH_UNITS, 1.0f,
+                       CAR_FOOTPRINT_HALF_LENGTH_UNITS }
+        }
+    };
+    car_modifier_context_t other_context = { .state = CAR_MODIFIER_STATE_APPROACH_TURN };
+    geometry3d_instance_t agents[] = { other_instance };
+    car_modifier_context_t contexts[] = { other_context };
+    size_t agent_count = 1U;
+    car_modifier_environment_t environment = make_test_environment(0x31415926U);
+    environment.agent_instances = agents;
+    environment.agent_contexts = contexts;
+    environment.agent_count = &agent_count;
+
+    car_modifier_context_t waiting_context = {0};
+    geometry3d_instance_t waiting_instance =
+    {
+        .transform.position = { .x = -50.0f, .y = -1000.0f, .z = 75.0f },
+        .transform.rotation_rad = { .y = 0.25f }
+    };
+    CHECK(car_modifier_context_init_spawn(&waiting_context, &environment));
+    const uint32_t initial_random_state = environment.random_state;
+
+    CHECK(car_modifier_update(&waiting_instance, 1.0f, &waiting_context));
+    CHECK(waiting_context.state == CAR_MODIFIER_STATE_SPAWN);
+    CHECK(waiting_instance.transform.position.x == -50.0f);
+    CHECK(waiting_instance.transform.position.z == 75.0f);
+    CHECK(waiting_instance.transform.position.y == -1000.0f);
+    CHECK(waiting_instance.transform.rotation_rad.y == 0.25f);
+    CHECK(environment.random_state != initial_random_state);
+
+    /* Waiting cars do not reserve their stale world position. */
+    contexts[0].state = CAR_MODIFIER_STATE_SPAWN;
+    environment.random_state = initial_random_state;
+    CHECK(car_modifier_update(&waiting_instance, 0.0f, &waiting_context));
+    CHECK(waiting_context.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+    CHECK(waiting_instance.transform.position.x == probe_instance.transform.position.x);
+    CHECK(waiting_instance.transform.position.z == probe_instance.transform.position.z);
+    return true;
+}
+
+bool test_car_spawn_suite(void)
+{
+    CHECK(test_car_spawn_state_is_processed_with_zero_dt());
+    CHECK(test_car_spawn_state_is_visible_after_leaving_city());
+    CHECK(test_blocked_spawn_retries_without_moving_car());
+
+    return true;
+}

@@ -10,11 +10,13 @@
 #include "depth_buffer.h"
 
 #define SCENE3D_MAX_INSTANCES 64U
+#define SCENE3D_MAX_AGENTS 16U
 
 #define SCENE3D_NO_PARENT_INDEX ((size_t)-1)
 
 typedef struct
 {
+    /* Static scene instances, including scenery and non-agent animations. */
     geometry3d_instance_t instances[SCENE3D_MAX_INSTANCES];
 
     /*
@@ -24,11 +26,20 @@ typedef struct
     size_t parent_indices[SCENE3D_MAX_INSTANCES];
 
     size_t instance_count;
+
+    /* Dynamic agents (currently cars), kept separate for simulation queries. */
+    geometry3d_instance_t agent_instances[SCENE3D_MAX_AGENTS];
+    size_t agent_count;
 } scene3d_t;
 
 void scene3d_init(scene3d_t *scene);
 
 bool scene3d_add_instance(
+    scene3d_t *scene,
+    const geometry3d_instance_t *instance);
+
+/* Add a root instance to the dynamic-agent collection. */
+bool scene3d_add_agent_instance(
     scene3d_t *scene,
     const geometry3d_instance_t *instance);
 

@@ -5,6 +5,21 @@
 #include "renderer3d.h"
 #include "modifier3d.h"
 
+static bool scene3d_counts_are_valid(const scene3d_t *scene)
+{
+    return scene != NULL &&
+           scene->instance_count <= SCENE3D_MAX_INSTANCES &&
+           scene->agent_count <= SCENE3D_MAX_AGENTS &&
+           scene->instance_count + scene->agent_count <= SCENE3D_MAX_INSTANCES;
+}
+
+static bool scene3d_instance_is_valid(const geometry3d_instance_t *instance)
+{
+    return instance != NULL &&
+           geometry3d_model_is_valid(instance->model) &&
+           instance->model->vertex_count <= RENDERER3D_MAX_VERTICES;
+}
+
 void scene3d_init(scene3d_t *scene)
 {
     if (scene == NULL)
@@ -13,6 +28,7 @@ void scene3d_init(scene3d_t *scene)
     }
 
     scene->instance_count = 0U;
+    scene->agent_count = 0U;
 
     for (size_t i = 0U; i < SCENE3D_MAX_INSTANCES; ++i)
     {
@@ -24,18 +40,12 @@ bool scene3d_add_instance(
     scene3d_t *scene,
     const geometry3d_instance_t *instance)
 {
-    if (scene == NULL || instance == NULL)
+    if (!scene3d_counts_are_valid(scene) || !scene3d_instance_is_valid(instance))
     {
         return false;
     }
 
-    if (scene->instance_count >= SCENE3D_MAX_INSTANCES)
-    {
-        return false;
-    }
-
-    if (!geometry3d_model_is_valid(instance->model) ||
-        instance->model->vertex_count > RENDERER3D_MAX_VERTICES)
+    if (scene->instance_count + scene->agent_count >= SCENE3D_MAX_INSTANCES)
     {
         return false;
     }
@@ -47,6 +57,21 @@ bool scene3d_add_instance(
 
     ++scene->instance_count;
 
+    return true;
+}
+
+bool scene3d_add_agent_instance(
+    scene3d_t *scene,
+    const geometry3d_instance_t *instance)
+{
+    if (!scene3d_counts_are_valid(scene) || !scene3d_instance_is_valid(instance) ||
+        scene->agent_count >= SCENE3D_MAX_AGENTS ||
+        scene->instance_count + scene->agent_count >= SCENE3D_MAX_INSTANCES)
+    {
+        return false;
+    }
+
+    scene->agent_instances[scene->agent_count++] = *instance;
     return true;
 }
 
@@ -69,7 +94,7 @@ bool scene3d_update(
     if (scene == NULL ||
         !isfinite(dt_seconds) ||
         dt_seconds < 0.0f ||
-        scene->instance_count > SCENE3D_MAX_INSTANCES)
+        !scene3d_counts_are_valid(scene))
     {
         return false;
     }
@@ -78,11 +103,30 @@ bool scene3d_update(
      * Every instance owns its modifiers.
      * Modifiers incrementally update the instance's current transform.
      */
+    /* Static scene instances are updated once and never enter agent phases. */
     for (size_t i = 0U; i < scene->instance_count; ++i)
     {
         if (!modifier3d_update_instance(
                 &scene->instances[i],
                 dt_seconds))
+        {
+            return false;
+        }
+    }
+
+    /* Phase 1: all agents sense the same pre-movement scene state. */
+    for (size_t i = 0U; i < scene->agent_count; ++i)
+    {
+        if (!modifier3d_pre_update_instance(&scene->agent_instances[i], dt_seconds))
+        {
+            return false;
+        }
+    }
+
+    /* Phase 2: advance agent routes and transforms after sensing is complete. */
+    for (size_t i = 0U; i < scene->agent_count; ++i)
+    {
+        if (!modifier3d_update_instance(&scene->agent_instances[i], dt_seconds))
         {
             return false;
         }
@@ -103,7 +147,7 @@ bool scene3d_render(
         depth_buffer == NULL ||
         view_matrix == NULL ||
         projection == NULL ||
-        scene->instance_count > SCENE3D_MAX_INSTANCES)
+        !scene3d_counts_are_valid(scene))
     {
         return false;
     }
@@ -136,6 +180,17 @@ bool scene3d_render(
         }
     }
 
+    for (size_t i = 0U; i < scene->agent_count; ++i)
+    {
+        matrix4_t world_matrix;
+        if (!geometry3d_build_transform_matrix(&scene->agent_instances[i].transform, &world_matrix) ||
+            !renderer3d_rasterize_instance(depth_buffer, &scene->agent_instances[i],
+                                           &world_matrix, view_matrix, projection))
+        {
+            return false;
+        }
+    }
+
     /*
      * PASS 2: draw all edges using the same transform hierarchy.
      */
@@ -163,6 +218,17 @@ bool scene3d_render(
         }
     }
 
+    for (size_t i = 0U; i < scene->agent_count; ++i)
+    {
+        matrix4_t world_matrix;
+        if (!geometry3d_build_transform_matrix(&scene->agent_instances[i].transform, &world_matrix) ||
+            !renderer3d_draw_instance(canvas, depth_buffer, &scene->agent_instances[i],
+                                      &world_matrix, view_matrix, projection))
+        {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -172,7 +238,7 @@ bool scene3d_set_parent(
     size_t parent_index)
 {
     if (scene == NULL ||
-        scene->instance_count > SCENE3D_MAX_INSTANCES ||
+        !scene3d_counts_are_valid(scene) ||
         child_index >= scene->instance_count ||
         parent_index >= scene->instance_count ||
         child_index == parent_index)
@@ -219,7 +285,7 @@ bool scene3d_clear_parent(
     size_t child_index)
 {
     if (scene == NULL ||
-        scene->instance_count > SCENE3D_MAX_INSTANCES ||
+        !scene3d_counts_are_valid(scene) ||
         child_index >= scene->instance_count)
     {
         return false;
@@ -237,7 +303,7 @@ bool scene3d_build_world_transform(
 {
     if (scene == NULL ||
         world_matrix == NULL ||
-        scene->instance_count > SCENE3D_MAX_INSTANCES ||
+        !scene3d_counts_are_valid(scene) ||
         instance_index >= scene->instance_count)
     {
         return false;

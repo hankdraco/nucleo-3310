@@ -9,7 +9,10 @@ The host build currently covers:
 - the input-protocol parser;
 - the input-state logic;
 - camera orientation and view-matrix behavior;
-- camera-controller input and movement logic.
+- camera-controller input and movement logic;
+- car trajectory, route-FSM and safety-FSM scaffold behavior;
+- generic modifier behavior;
+- agent pre-update and movement phase ordering in the scene update loop.
 
 These tests verify portable logic. They do not replace on-target verification of UART interrupts, BSP integration, timing, or synchronization between an ISR and the main loop.
 
@@ -62,6 +65,12 @@ INPUT PROTOCOL TESTS PASSED
 INPUT STATE TESTS PASSED
 CAMERA3D TESTS PASSED
 CAMERA CONTROLLER TESTS PASSED
+CAR TRAJECTORY TESTS PASSED
+CAR MODIFIER TESTS PASSED
+CAR SPAWN TESTS PASSED
+CAR FOOTPRINT TESTS PASSED
+MODIFIER3D TESTS PASSED
+SCENE3D AGENT UPDATE TESTS PASSED
 ALL TESTS PASSED
 ```
 
@@ -86,9 +95,15 @@ Tests/test_runner.c
   ├── camera3d_tests.c
   │     └── Core/Src/camera3d.c
   │           └── geometry3d.c / matrix4.c
-  └── camera_controller_tests.c
-        └── Core/Src/camera_controller.c
-              └── camera3d.c / geometry3d.c / matrix4.c
+  ├── camera_controller_tests.c
+  │     └── Core/Src/camera_controller.c
+  │           └── camera3d.c / geometry3d.c / matrix4.c
+  ├── test_car_trajectory.c / test_car_modifier.c / test_car_spawn.c / test_car_footprint.c
+  │     └── Core/Src/car_trajectory.c / car_modifier.c
+  ├── test_modifier3d.c
+  │     └── Core/Src/modifier3d.c
+  └── test_scene3d_agents.c
+        └── Core/Src/scene3d.c / modifier3d.c
 ```
 
 The exact source list and dependencies are defined by `Tests/CMakeLists.txt`. Shared implementation files should only be added once to the host target.

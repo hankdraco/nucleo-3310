@@ -9,4 +9,7 @@
  */
 extern const geometry3d_model_t geometry3d_plane_model;
 
+/* Unit plus-shaped street surface in the XZ plane. */
+extern const geometry3d_model_t geometry3d_plus_road_model;
+
 #endif /* CITY_MODELS_H */

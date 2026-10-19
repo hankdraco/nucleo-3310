@@ -23,7 +23,7 @@ The current protocol is sent from PC to STM32. No acknowledgement message or seq
 The body before the `*` consists of exactly 19 ASCII bytes. The full frame is 23 bytes with LF, or 24 bytes with CRLF.
 
 | Field | Width | Description |
-|---|---:|---|
+| --- | ---: | --- |
 | `@` | 1 character | Start-of-frame marker |
 | `KKKKKKKK` | 8 hexadecimal characters | 32-bit keyboard/action mask |
 | `,` | 1 character | Field separator |
@@ -47,7 +47,7 @@ Hexadecimal characters are accepted in either case by the parser. The Python enc
 The mask is an unsigned 32-bit value represented by eight hexadecimal digits. The currently defined bits in `input_types.h` are:
 
 | Bit mask | Symbol | Meaning |
-|---:|---|---|
+| ---: | --- | --- |
 | `0x00000001` | `INPUT_KEY_FORWARD` | Move forward (`W` in the PC controller) |
 | `0x00000002` | `INPUT_KEY_BACKWARD` | Move backward (`S`) |
 | `0x00000004` | `INPUT_KEY_STRAFE_LEFT` | Strafe left (`A`) |
@@ -66,7 +66,7 @@ The mask represents the current state, not a sequence of key-down/key-up events.
 Examples:
 
 | Signed value | 16-bit hexadecimal representation |
-|---:|---|
+| ---: | --- |
 | `0` | `0000` |
 | `10` | `000A` |
 | `-1` | `FFFF` |

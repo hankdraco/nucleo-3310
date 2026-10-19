@@ -4,6 +4,10 @@
 #include <stdint.h>
 
 #define CAMERA_CONTROLLER_TWO_PI 6.28318530717958647692f
+#define CAMERA_CONTROLLER_FOLLOW_DISTANCE_UNITS (8.0f)
+#define CAMERA_CONTROLLER_FOLLOW_HEIGHT_UNITS (6.0f)
+#define CAMERA_CONTROLLER_LOOK_AHEAD_UNITS (10.0f)
+#define CAMERA_CONTROLLER_FOLLOW_SMOOTHING (6.0f)
 
 static float wrap_yaw(float yaw_rad)
 {
@@ -101,6 +105,11 @@ bool camera_controller_update(
         !controller->initialized)
     {
         return false;
+    }
+
+    if (controller->follow_mode)
+    {
+        return isfinite(dt_seconds) && dt_seconds >= 0.0f;
     }
 
     if (camera->target_enabled)
@@ -249,5 +258,99 @@ bool camera_controller_update(
     camera->rotation_rad.y = yaw_rad;
     camera->rotation_rad.z = 0.0f;
 
+    return true;
+}
+
+bool camera_controller_set_follow_mode(
+    camera_controller_t *controller,
+    camera3d_t *camera,
+    bool enabled)
+{
+    if (controller == NULL || camera == NULL || !controller->initialized)
+    {
+        return false;
+    }
+
+    if (enabled == controller->follow_mode) return true;
+
+    if (enabled)
+    {
+        if (camera->target_enabled && !camera3d_clear_target(camera))
+        {
+            return false;
+        }
+        controller->follow_mode = true;
+        controller->follow_camera_initialized = false;
+        return true;
+    }
+
+    if (camera->target_enabled && !camera3d_clear_target(camera))
+    {
+        return false;
+    }
+    controller->follow_mode = false;
+    controller->follow_camera_initialized = false;
+    controller->yaw_rad = wrap_yaw(camera->rotation_rad.y);
+    controller->pitch_rad = clamp_pitch(camera->rotation_rad.x);
+    return true;
+}
+
+bool camera_controller_follow_vehicle(
+    camera_controller_t *controller,
+    camera3d_t *camera,
+    const geometry3d_vector3_t *vehicle_position,
+    float vehicle_yaw_rad,
+    float dt_seconds,
+    bool snap_to_vehicle)
+{
+    if (controller == NULL || camera == NULL || vehicle_position == NULL ||
+        !controller->initialized || !controller->follow_mode ||
+        !is_finite_vector(vehicle_position) || !isfinite(vehicle_yaw_rad) ||
+        !isfinite(dt_seconds) || dt_seconds < 0.0f)
+    {
+        return false;
+    }
+
+    const float forward_x = sinf(vehicle_yaw_rad);
+    const float forward_z = cosf(vehicle_yaw_rad);
+    geometry3d_vector3_t desired_position =
+    {
+        .x = vehicle_position->x -
+             forward_x * CAMERA_CONTROLLER_FOLLOW_DISTANCE_UNITS,
+        .y = vehicle_position->y + CAMERA_CONTROLLER_FOLLOW_HEIGHT_UNITS,
+        .z = vehicle_position->z -
+             forward_z * CAMERA_CONTROLLER_FOLLOW_DISTANCE_UNITS
+    };
+    geometry3d_vector3_t target =
+    {
+        .x = vehicle_position->x +
+             forward_x * CAMERA_CONTROLLER_LOOK_AHEAD_UNITS,
+        .y = vehicle_position->y + 1.0f,
+        .z = vehicle_position->z +
+             forward_z * CAMERA_CONTROLLER_LOOK_AHEAD_UNITS
+    };
+
+    if (!is_finite_vector(&desired_position) || !is_finite_vector(&target))
+    {
+        return false;
+    }
+
+    if (snap_to_vehicle || !controller->follow_camera_initialized)
+    {
+        camera->position = desired_position;
+    }
+    else if (dt_seconds > 0.0f)
+    {
+        float blend = CAMERA_CONTROLLER_FOLLOW_SMOOTHING * dt_seconds;
+        if (blend > 1.0f) blend = 1.0f;
+        camera->position.x += (desired_position.x - camera->position.x) * blend;
+        camera->position.y += (desired_position.y - camera->position.y) * blend;
+        camera->position.z += (desired_position.z - camera->position.z) * blend;
+    }
+
+    if (!camera3d_set_target(camera, &target)) return false;
+    controller->follow_camera_initialized = true;
+    controller->yaw_rad = camera->rotation_rad.y;
+    controller->pitch_rad = camera->rotation_rad.x;
     return true;
 }

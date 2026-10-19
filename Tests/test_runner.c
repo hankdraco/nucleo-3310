@@ -7,6 +7,13 @@ bool test_input_protocol_suite(void);
 bool test_input_state_suite(void);
 bool test_camera3d_suite(void);
 bool test_camera_controller_suite(void);
+bool test_car_trajectory_suite(void);
+bool test_car_modifier_suite(void);
+bool test_car_spawn_suite(void);
+bool test_car_footprint_suite(void);
+bool test_modifier3d_suite(void);
+bool test_scene3d_agent_update_suite(void);
+bool test_city_models_suite(void);
 
 int main(void)
 {
@@ -20,14 +27,12 @@ int main(void)
     }
     printf("PCD8544 TESTS PASSED\n");
 
-
     if (!test_display_suite())
     {
         printf("DISPLAY TESTS FAILED\n");
         return 1;
     }
     printf("DISPLAY TESTS PASSED\n");
-
 
     if (!test_input_protocol_suite())
     {
@@ -36,14 +41,12 @@ int main(void)
     }
     printf("INPUT PROTOCOL TESTS PASSED\n");
 
-
     if (!test_input_state_suite())
     {
         printf("INPUT STATE TESTS FAILED\n");
         return 1;
     }
     printf("INPUT STATE TESTS PASSED\n");
-
 
     if (!test_camera3d_suite())
     {
@@ -52,7 +55,6 @@ int main(void)
     }
     printf("CAMERA3D TESTS PASSED\n");
 
-    
     if (!test_camera_controller_suite())
     {
         printf("CAMERA CONTROLLER TESTS FAILED\n");
@@ -60,6 +62,54 @@ int main(void)
     }
     printf("CAMERA CONTROLLER TESTS PASSED\n");
 
+    if (!test_car_trajectory_suite())
+    {
+        printf("CAR TRAJECTORY TESTS FAILED\n");
+        return 1;
+    }
+    printf("CAR TRAJECTORY TESTS PASSED\n");
+
+    if (!test_car_modifier_suite())
+    {
+        printf("CAR MODIFIER TESTS FAILED\n");
+        return 1;
+    }
+    printf("CAR MODIFIER TESTS PASSED\n");
+
+    if (!test_car_spawn_suite())
+    {
+        printf("CAR SPAWN TESTS FAILED\n");
+        return 1;
+    }
+    printf("CAR SPAWN TESTS PASSED\n");
+
+    if (!test_car_footprint_suite())
+    {
+        printf("CAR FOOTPRINT TESTS FAILED\n");
+        return 1;
+    }
+    printf("CAR FOOTPRINT TESTS PASSED\n");
+
+    if (!test_modifier3d_suite())
+    {
+        printf("MODIFIER3D TESTS FAILED\n");
+        return 1;
+    }
+    printf("MODIFIER3D TESTS PASSED\n");
+
+    if (!test_scene3d_agent_update_suite())
+    {
+        printf("SCENE3D AGENT UPDATE TESTS FAILED\n");
+        return 1;
+    }
+    printf("SCENE3D AGENT UPDATE TESTS PASSED\n");
+
+    if (!test_city_models_suite())
+    {
+        printf("CITY MODEL TESTS FAILED\n");
+        return 1;
+    }
+    printf("CITY MODEL TESTS PASSED\n");
 
     printf("ALL TESTS PASSED\n");
 
