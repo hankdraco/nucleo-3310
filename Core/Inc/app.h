@@ -2,6 +2,7 @@
 #define APP_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "camera3d.h"
 #include "projection.h"
@@ -19,6 +20,9 @@ typedef struct
     scene3d_t scene;
     camera3d_t camera;
     camera_controller_t camera_controller;
+    size_t followed_agent_index;
+    bool camera_mode_key_was_down;
+    car_modifier_state_t previous_car_states[APP_CAR_COUNT];
 
     /* Shared environment and stable per-car state referenced by scene modifiers. */
     car_modifier_environment_t car_environment;

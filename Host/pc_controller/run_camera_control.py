@@ -26,6 +26,7 @@ KEY_STRAFE_LEFT     = 0x00000004
 KEY_STRAFE_RIGHT    = 0x00000008
 KEY_MOVE_UP         = 0x00000010
 KEY_MOVE_DOWN       = 0x00000020
+KEY_CAMERA_MODE     = 0x00000040
 
 
 def set_mouse_capture(captured: bool) -> None:
@@ -58,6 +59,9 @@ def get_key_mask() -> int:
     if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
         key_mask |= KEY_MOVE_DOWN
 
+    if keys[pygame.K_c]:
+        key_mask |= KEY_CAMERA_MODE
+
     return key_mask
 
 
@@ -78,7 +82,7 @@ def draw_status(
 
     lines = [
         f"STM32 Camera Controller - {PORT} @ {BAUD_RATE}",
-        "W/S: forward/back | A/D: strafe | SPACE/CTRL: vertical",
+        "W/S: forward/back | A/D: strafe | SPACE/CTRL: vertical | C: camera mode",
         "Mouse: look | ESC: quit | Switch focus to release mouse",
         (
             f"Focus: {'captured' if focused else 'released'}"

@@ -151,6 +151,8 @@ The free-fly controller provides first-person-style movement:
 | Mouse X | Rotate around the world-space vertical axis |
 | Mouse Y | Change pitch |
 
+Press **C** to switch between vehicle-follow and free-fly camera modes. Vehicle-follow is enabled by default: it tracks the first active car, then switches to the next car after a successful respawn. The camera stays above and behind the car and looks ahead along its current heading.
+
 The camera uses yaw and pitch, without roll. Horizontal rotation is performed around the world's vertical axis, while pitch changes the camera's inclination.
 
 Continuous keyboard movement is scaled by elapsed time. Mouse input is interpreted as relative movement, allowing the camera to rotate independently of the rendering interval.

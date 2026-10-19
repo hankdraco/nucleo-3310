@@ -272,7 +272,7 @@ The application separates simulation updates from the slower display refresh.
 
 ### 8.1 Application update
 
-`app_run()` validates its arguments, updates camera control from the current input snapshot, and advances the scene when `dt_seconds > 0`. It accumulates elapsed time for rendering and schedules a render when the accumulator reaches the configured interval, currently `1 / 30` second.
+`app_run()` validates its arguments, handles camera-mode input, updates the camera controller, and advances the scene when `dt_seconds > 0`. In vehicle-follow mode, it then updates the camera from the followed agent's latest transform. The application accumulates elapsed time for rendering and schedules a render when the accumulator reaches the configured interval, currently `1 / 30` second.
 
 Thus, simulation and input handling are not tied to every LCD refresh. The display is small and comparatively slow, while the scene's state can continue to advance between rendered frames.
 
@@ -300,7 +300,7 @@ The plane meshes use triangles to contribute depth even though their visible rep
 
 ### 8.4 Camera and perspective projection
 
-The camera can aim at a world-space target (look-at mode) or use a manually controlled orientation. The camera module builds a world-to-camera view matrix. The controller is a separate module that applies the application's input snapshot to camera state.
+The camera can aim at a world-space target (look-at mode) or use a manually controlled orientation. The camera module builds a world-to-camera view matrix. The controller supports vehicle-follow and free-fly modes; press `C` in the PC controller to switch between them. Vehicle-follow is the default. It selects the first active car when enabled, follows that car until it returns to `SPAWN`, then selects the first car that completes a successful spawn. The camera is positioned above and behind the car and looks ahead along its current heading, with a short positional smoothing interval.
 
 The current demo uses perspective projection. In camera space, projected screen coordinates follow the form:
 
