@@ -92,7 +92,7 @@ static bool test_car_spawn_state_is_processed_with_zero_dt(void)
     return true;
 }
 
-static bool test_car_respawns_immediately_without_consuming_leftover_dt(void)
+static bool test_car_spawn_state_is_visible_after_leaving_city(void)
 {
     car_modifier_environment_t environment_a = make_test_environment(0xA5A5A5A5U);
     car_modifier_environment_t environment_b = make_test_environment(0xA5A5A5A5U);
@@ -108,21 +108,22 @@ static bool test_car_respawns_immediately_without_consuming_leftover_dt(void)
     CHECK(car_modifier_update(&instance_a, 0.0f, &context_a));
     CHECK(car_modifier_update(&instance_b, 0.0f, &context_b));
 
-    /*
-     * Force car A to have left the city. Its update must respawn it in this
-     * same call and discard the remaining dt instead of moving the new car.
-     * Car B explicitly performs the equivalent SPAWN transition with dt=0.
-     */
+    /* Leave the city and expose SPAWN for one complete update. */
     context_a.state = CAR_MODIFIER_STATE_DEPARTING;
     context_a.trajectory.pose.position.x =
         environment_a.city_half_extent_x + 1.0f;
     context_b.state = CAR_MODIFIER_STATE_SPAWN;
 
     CHECK(car_modifier_update(&instance_a, 10.0f, &context_a));
+    CHECK(context_a.state == CAR_MODIFIER_STATE_SPAWN);
+    CHECK(instance_a.transform.position.x > environment_a.city_half_extent_x);
+
+    /* The previous dt was not applied to a replacement route. */
     CHECK(car_modifier_update(&instance_b, 0.0f, &context_b));
+    CHECK(context_b.state == CAR_MODIFIER_STATE_APPROACH_TURN);
+    CHECK(car_modifier_update(&instance_a, 0.0f, &context_a));
 
     CHECK(context_a.state == CAR_MODIFIER_STATE_APPROACH_TURN);
-    CHECK(context_b.state == CAR_MODIFIER_STATE_APPROACH_TURN);
 
     CHECK(test_float_equal(
         context_a.trajectory.pose.position.x,
@@ -205,7 +206,7 @@ static bool test_blocked_spawn_retries_without_moving_car(void)
 bool test_car_spawn_suite(void)
 {
     CHECK(test_car_spawn_state_is_processed_with_zero_dt());
-    CHECK(test_car_respawns_immediately_without_consuming_leftover_dt());
+    CHECK(test_car_spawn_state_is_visible_after_leaving_city());
     CHECK(test_blocked_spawn_retries_without_moving_car());
 
     return true;

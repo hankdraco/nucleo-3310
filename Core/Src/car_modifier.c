@@ -944,12 +944,6 @@ bool car_modifier_update(
                 !car_modifier_inside_city(&next_context.trajectory.pose,next_context.environment))
             {
                 next_context.state=CAR_MODIFIER_STATE_SPAWN;
-                const car_modifier_spawn_result_t spawn_result =
-                    car_modifier_spawn(instance, &next_context, &next_random_state);
-                if (spawn_result == CAR_MODIFIER_SPAWN_ERROR) return false;
-                if (spawn_result == CAR_MODIFIER_SPAWN_SUCCESS) spawned = true;
-                else if (next_context.environment != NULL)
-                    next_context.environment->random_state = next_random_state;
                 remaining_dt=0.0f;break;
             }
             if(!car_trajectory_update(&next_context.trajectory,remaining_dt))return false;
@@ -958,12 +952,6 @@ bool car_modifier_update(
                 !car_modifier_inside_city(&next_context.trajectory.pose,next_context.environment))
             {
                 next_context.state=CAR_MODIFIER_STATE_SPAWN;
-                const car_modifier_spawn_result_t spawn_result =
-                    car_modifier_spawn(instance, &next_context, &next_random_state);
-                if (spawn_result == CAR_MODIFIER_SPAWN_ERROR) return false;
-                if (spawn_result == CAR_MODIFIER_SPAWN_SUCCESS) spawned = true;
-                else if (next_context.environment != NULL)
-                    next_context.environment->random_state = next_random_state;
             }
         }
         else if (next_context.state == CAR_MODIFIER_STATE_APPROACH_TURN)
