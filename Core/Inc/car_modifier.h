@@ -115,7 +115,7 @@ bool car_modifier_update(
     float dt_seconds,
     void *context);
 
-/* First agent-update phase. The safety FSM is currently an inert scaffold. */
+/* First agent-update phase: sense a lead vehicle and compute the target speed. */
 bool car_modifier_safety_update(
     geometry3d_instance_t *instance,
     float dt_seconds,
