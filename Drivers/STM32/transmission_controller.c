@@ -7,26 +7,18 @@
 
 #include <stdint.h>
 
-/*
- * Jeden bajt przekazywany przez HAL.
- *
- * Zmienna statyczna, ponieważ HAL korzysta z niej
- * również po powrocie z funkcji start().
+/* One byte passed to HAL. Static storage is required because HAL continues
+ * using this buffer after the start function returns.
  */
 static uint8_t rx_byte;
 
-/* Parser należy wyłącznie do TransmissionController. */
+/* The transmission controller is the sole owner of this parser. */
 static input_protocol_t parser;
 
-/*
- * Ustawiany w ISR, jeśli nie uda się ponownie
- * uruchomić odbioru. Odczytywany przez main().
- */
+/* Set in the ISR if reception cannot be re-armed; read by main(). */
 static volatile uint32_t receive_fault;
 
-/*
- * Ponownie uzbraja odbiór jednego bajtu.
- */
+/* Re-arm reception for one byte. */
 static void arm_receive(UART_HandleTypeDef *huart)
 {
     if (HAL_UART_Receive_IT(
@@ -43,17 +35,11 @@ bool transmission_controller_start(void)
     input_protocol_init(&parser);
     receive_fault = 0U;
 
-    /*
-     * CubeMX nie skonfigurował NVIC dla LPUART1,
-     * dlatego konfigurujemy tę linię ręcznie.
-     */
+    /* CubeMX did not configure the LPUART1 NVIC line, so configure it here. */
     HAL_NVIC_SetPriority(LPUART1_IRQn, 5U, 0U);
     HAL_NVIC_ClearPendingIRQ(LPUART1_IRQn);
 
-    /*
-     * Najpierw uzbrajamy odbiór, a dopiero potem
-     * włączamy przerwanie w NVIC.
-     */
+    /* Arm reception before enabling the NVIC interrupt. */
     if (HAL_UART_Receive_IT(
             &hcom_uart[COM1],
             &rx_byte,
@@ -72,9 +58,7 @@ bool transmission_controller_has_fault(void)
     return receive_fault != 0U;
 }
 
-/*
- * Callback HAL wywoływany po odebraniu jednego bajtu.
- */
+/* HAL callback invoked after one byte has been received. */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if (huart == NULL || huart->Instance != LPUART1)
@@ -97,20 +81,14 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             HAL_GetTick());
     }
 
-    /*
-     * NO_FRAME: zbieramy dalsze bajty.
-     *
-     * FRAME_REJECTED: parser odrzucił ramkę;
-     * kolejna ramka może być odbierana normalnie.
+    /* NO_FRAME means more bytes are needed. FRAME_REJECTED means the parser
+     * discarded a frame; reception can continue with the next one.
      */
     arm_receive(huart);
 }
 
-/*
- * Callback HAL wywoływany po błędzie UART.
- *
- * Odrzucamy niedokończoną ramkę i próbujemy
- * wznowić odbiór od nowa.
+/* HAL callback invoked after a UART error. Discard the incomplete frame and
+ * attempt to restart reception from the beginning.
  */
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {

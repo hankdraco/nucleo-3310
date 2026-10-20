@@ -3,13 +3,9 @@
 #include <limits.h>
 #include <stddef.h>
 
-/*
- * Na STM32G474RE używamy CMSIS do krótkiego
- * wyłączenia przerwań podczas konsumpcji stanu.
- *
- * W kompilacji natywnej na PC sekcja krytyczna
- * jest pusta. Taki wariant nadaje się do testów
- * bez współbieżnego dostępu.
+/* On STM32G474RE, CMSIS briefly disables interrupts while the input state is
+ * consumed. In native PC builds the critical section is empty, which is
+ * suitable for tests without concurrent access.
  */
 #if defined(STM32G474xx)
 
@@ -43,14 +39,9 @@ static void critical_section_exit(uint32_t primask)
 
 #endif
 
-/*
- * Współdzielony stan:
- *
- * - zapis z kontekstu przerwania UART,
- * - odczyt i konsumpcja z głównej pętli.
- *
- * Założenie: input_state_publish_from_isr()
- * ma jednego autora - odbiornik UART.
+/* Shared state is written by the UART receive ISR and read/consumed by the
+ * main loop. Assumption: input_state_publish_from_isr() has one writer, the
+ * UART receiver.
  */
 typedef struct
 {
@@ -63,9 +54,8 @@ typedef struct
 
 static volatile input_state_storage_t state;
 
-/*
- * Dodaje przyrost bez ryzyka przepełnienia
- * typu ze znakiem, które w C byłoby UB.
+/* Add a delta with saturation, avoiding signed overflow, which is undefined
+ * behavior in C.
  */
 static int32_t saturating_add_i32(
     int32_t current,
@@ -86,10 +76,7 @@ static int32_t saturating_add_i32(
 
 void input_state_init(void)
 {
-    /*
-     * Inicjalizacja musi nastąpić przed
-     * uruchomieniem odbioru UART.
-     */
+    /* Initialize this state before starting UART reception. */
     state.key_mask = 0U;
     state.mouse_dx = 0;
     state.mouse_dy = 0;
@@ -105,12 +92,8 @@ void input_state_publish_from_isr(
         return;
     }
 
-    /*
-     * Funkcja działa w kontekście ISR.
-     * Główna pętla nie może wykonywać się
-     * równolegle z tym kodem na jednym rdzeniu.
-     *
-     * Nie wyłączamy tu ponownie przerwań.
+    /* This function runs in the ISR context. On a single core, the main loop
+     * cannot execute concurrently with it, so interrupts are not disabled again.
      */
     state.key_mask = frame->key_mask;
 
@@ -134,17 +117,13 @@ void input_state_consume(
         return;
     }
 
-    /*
-     * Pobranie stanu i wyzerowanie myszy
-     * muszą stanowić jedną spójną operację
-     * względem przerwania UART.
+    /* Reading the state and clearing mouse deltas must be atomic with respect
+     * to the UART interrupt.
      */
     uint32_t primask = critical_section_enter();
 
-    /*
-     * Odejmowanie bez znaku poprawnie obsługuje
-     * przejście licznika czasu przez UINT32_MAX,
-     * przy założeniu kontrolowanego interwału.
+    /* Unsigned subtraction handles the tick counter wrapping through
+     * UINT32_MAX, assuming the elapsed interval is bounded.
      */
     uint32_t elapsed_ms =
         now_ms - state.last_update_ms;
@@ -160,10 +139,8 @@ void input_state_consume(
     snapshot->mouse_dx = state.mouse_dx;
     snapshot->mouse_dy = state.mouse_dy;
 
-    /*
-     * Przyrosty myszy są konsumowane dokładnie raz.
-     * Stan klawiszy pozostaje utrzymany do kolejnej
-     * aktualizacji lub wystąpienia timeoutu.
+    /* Mouse deltas are consumed exactly once. Key state remains held until
+     * the next input update or timeout.
      */
     state.mouse_dx = 0;
     state.mouse_dy = 0;

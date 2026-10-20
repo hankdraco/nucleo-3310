@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ---------- Pomocnicze funkcje walidacji ---------- */
+/* ---------- Validation helpers ---------- */
 
 static int hex_digit_value(uint8_t ch)
 {
@@ -84,12 +84,9 @@ static bool parse_hex_u16(
     return true;
 }
 
-/*
- * Interpretuje 16-bitową wartość zapisaną
- * w kodzie U2 jako liczbę ze znakiem.
- *
- * Wynik int32_t pozwala uniknąć konwersji
- * wartości spoza zakresu int16_t.
+/* Interpret a 16-bit two's-complement value as a signed integer.
+ * The int32_t result avoids implementation-defined conversions for values
+ * outside the int16_t range.
  */
 static int32_t decode_i16_twos_complement(uint16_t raw)
 {
@@ -107,7 +104,7 @@ static int32_t decode_i16_twos_complement(uint16_t raw)
  * init       = 0x00
  * xorout     = 0x00
  *
- * Obliczamy od najbardziej znaczącego bitu.
+ * Process bits from most significant to least significant.
  */
 static uint8_t crc8(
     const uint8_t *data,
@@ -140,9 +137,7 @@ static bool decode_frame(
     size_t length,
     input_frame_t *frame_out)
 {
-    /*
-     * Dokładnie 22 znaki, bez LF i CR.
-     */
+    /* Exactly 22 characters, excluding LF and CR. */
     if (data == NULL ||
         frame_out == NULL ||
         length != 22U)
@@ -158,7 +153,7 @@ static bool decode_frame(
         return false;
     }
 
-    /* Odczyt CRC: dokładnie dwie cyfry HEX. */
+    /* Read the CRC as exactly two hexadecimal digits. */
     int crc_hi = hex_digit_value(data[20]);
     int crc_lo = hex_digit_value(data[21]);
 
@@ -171,9 +166,8 @@ static bool decode_frame(
         (uint8_t)(((uint32_t)crc_hi << 4U) |
                   (uint32_t)crc_lo);
 
-    /*
-     * CRC obejmuje bajty od '@' do końca pola DY,
-     * czyli 19 bajtów. Nie obejmuje '*' ani CRC.
+    /* The CRC covers 19 bytes, from '@' through the end of the DY field.
+     * It excludes '*' and the CRC digits themselves.
      */
     if (crc8(data, 19U) != received_crc)
     {
@@ -191,9 +185,7 @@ static bool decode_frame(
         return false;
     }
 
-    /*
-     * Wynik publikujemy dopiero po pełnej walidacji.
-     */
+    /* Publish the decoded data only after complete validation. */
     frame_out->key_mask = key_mask;
     frame_out->mouse_dx = decode_i16_twos_complement(raw_dx);
     frame_out->mouse_dy = decode_i16_twos_complement(raw_dy);
@@ -201,7 +193,7 @@ static bool decode_frame(
     return true;
 }
 
-/* ---------- Publiczny interfejs parsera ---------- */
+/* ---------- Public parser interface ---------- */
 
 void input_protocol_init(input_protocol_t *parser)
 {
@@ -224,9 +216,8 @@ input_protocol_result_t input_protocol_feed(
         return INPUT_PROTOCOL_NO_FRAME;
     }
 
-    /*
-     * Marker początku pozwala odzyskać synchronizację
-     * także wtedy, gdy poprzednia ramka była uszkodzona.
+    /* A start marker restores synchronization even if the previous frame
+     * was corrupted or incomplete.
      */
     if (byte == (uint8_t)'@')
     {
@@ -242,9 +233,8 @@ input_protocol_result_t input_protocol_feed(
         return INPUT_PROTOCOL_NO_FRAME;
     }
 
-    /*
-     * Po przepełnieniu odrzucamy resztę linii
-     * aż do końca lub do następnego markera '@'.
+    /* After overflow, discard the rest of the line until its terminator or
+     * the next '@' start marker.
      */
     if (parser->state == INPUT_PROTOCOL_DISCARDING)
     {
@@ -263,7 +253,7 @@ input_protocol_result_t input_protocol_feed(
     {
         size_t length = parser->length;
 
-        /* Obsługujemy zakończenia LF oraz CRLF. */
+        /* Accept both LF and CRLF line endings. */
         if (length > 0U &&
             parser->buffer[length - 1U] == (uint8_t)'\r')
         {
@@ -290,10 +280,7 @@ input_protocol_result_t input_protocol_feed(
         return INPUT_PROTOCOL_FRAME_REJECTED;
     }
 
-    /*
-     * Bufor zawiera bajty bieżącej ramki,
-     * ale nie znak końca linii.
-     */
+    /* The buffer contains the current frame bytes but not its line terminator. */
     if (parser->length >= sizeof(parser->buffer))
     {
         parser->length = 0U;
