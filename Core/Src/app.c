@@ -308,25 +308,11 @@ bool app_run(
         return false;
     }
 
-    telemetry_sample_t sample = {0};
-    if (dt_seconds > 0.0f)
+    app->render_accumulator_seconds += dt_seconds;
+    if (!isfinite(app->render_accumulator_seconds))
     {
-        sample.update_start_cycles = app_read_cycle_counter();
-        if (!scene3d_update(&app->scene, dt_seconds))
-        {
-            return false;
-        }
-        sample.update_end_cycles = app_read_cycle_counter();
-
-        app->render_accumulator_seconds += dt_seconds;
-
-        if (!isfinite(app->render_accumulator_seconds))
-        {
-            return false;
-        }
+        return false;
     }
-
-    if (!app_update_follow_camera(app, dt_seconds)) return false;
 
     if (app->render_accumulator_seconds <
         APP_RENDER_INTERVAL_SECONDS)
@@ -334,11 +320,23 @@ bool app_run(
         return true;
     }
 
+    /* Advance the scene only for a frame that will be rendered. */
+    const float simulation_dt_seconds = app->render_accumulator_seconds;
+    telemetry_sample_t sample = {0};
+    sample.update_start_cycles = app_read_cycle_counter();
+    if (!scene3d_update(&app->scene, simulation_dt_seconds))
+    {
+        return false;
+    }
+    sample.update_end_cycles = app_read_cycle_counter();
+
     app->render_accumulator_seconds -=
         floorf(
             app->render_accumulator_seconds /
             APP_RENDER_INTERVAL_SECONDS
         ) * APP_RENDER_INTERVAL_SECONDS;
+
+    if (!app_update_follow_camera(app, simulation_dt_seconds)) return false;
 
     sample.sequence = app->telemetry_next_sequence++;
     if (!app_render_and_flush(app, &sample))
