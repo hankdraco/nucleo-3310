@@ -19,7 +19,7 @@ The engine is intended to make the individual parts of a small 3D pipeline under
 - Prefer bounded arrays and explicit limits over dynamic allocation.
 - Validate inputs and reject invalid state rather than silently propagating non-finite values.
 
-The current scene is a demonstration environment: a ground plane, a single plus-shaped street mesh, buildings, an animated central assembly with six attached cubes, and several moving cars.
+The current scene is a demonstration environment: a ground plane, a single plus-shaped street mesh, buildings, an animated assembly on the tallest building with six attached cubes, and several moving cars.
 
 ## 2. Main modules and responsibilities
 
@@ -102,7 +102,7 @@ With the project's column-vector convention, a child's world matrix is composed 
 M_world(child) = M_world(parent) * M_local(child)
 ```
 
-This allows an attached object to move and rotate with its parent while retaining its own local offset and animation. The central animated centerpiece and its six children demonstrate this relationship.
+This allows an attached object to move and rotate with its parent while retaining its own local offset and animation. The animated rooftop centerpiece and its six children demonstrate this relationship.
 
 The hierarchy is checked during transform construction as well, so a malformed parent chain does not result in an unbounded traversal.
 
@@ -240,10 +240,10 @@ The demo scene contains several logical categories:
 
 - a ground plane and a plus-shaped street mesh;
 - city-building instances;
-- a central animated centerpiece and its attached children;
+- an animated centerpiece on the tallest building and its attached children;
 - moving vehicle instances.
 
-Static buildings have no modifiers. The centerpiece and its children use scalar rotation modifiers. Each car uses a custom modifier linked to its own route context.
+Static buildings have no modifiers. The centerpiece is positioned above the tallest building's roof, with clearance for its rotating parent and children. The centerpiece and its children use scalar rotation modifiers. Each car uses a custom modifier linked to its own route context.
 
 Static scenery and non-car animations occupy `scene3d_t.instances[]`. Cars occupy `scene3d_t.agent_instances[]`, making the dynamic-agent collection directly available for simulation queries. Both collections are updated by `scene3d_update()` and included in both render passes. Parent-child transforms currently apply to regular scene instances; agents are root instances with their own world transforms.
 
@@ -318,7 +318,7 @@ The near plane prevents points too close to or behind the camera from being proj
 1. Initialize the scene and camera.
 2. Add the ground plane and the plus-shaped street mesh.
 3. Add the static buildings around the central streets.
-4. Add the central cube assembly and its three-axis rotation modifiers.
+4. Find the tallest building, then add the cube assembly above its roof with three-axis rotation modifiers.
 5. Add six child cubes, attach them to the centerpiece, and configure their own rotation modifiers.
 6. Add the configured number of cars to the agent list, each with its own persistent context and custom modifier.
 7. Configure the initial camera view and perspective projection.
