@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "camera3d.h"
 #include "projection.h"
@@ -10,12 +11,19 @@
 #include "camera_controller.h"
 #include "car_modifier.h"
 #include "input_types.h"
+#include "telemetry_protocol.h"
 
 #define APP_CAR_COUNT 10U
 
 typedef struct
 {
     float render_accumulator_seconds;
+
+    uint32_t telemetry_batch_start_ms;
+    uint16_t telemetry_next_sequence;
+    size_t telemetry_sample_count;
+    telemetry_sample_t telemetry_samples[TELEMETRY_PROTOCOL_MAX_SAMPLES];
+    uint8_t telemetry_frame[TELEMETRY_PROTOCOL_MAX_FRAME_SIZE];
 
     scene3d_t scene;
     camera3d_t camera;

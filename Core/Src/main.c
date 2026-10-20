@@ -26,6 +26,8 @@
 /* USER CODE BEGIN Includes */
 #include "input_state.h"
 #include "transmission_controller.h"
+#include "telemetry_transport.h"
+#include "stm32g4xx_nucleo.h"
 #include "input_state.h"
 
 #include "pcd8544.h"
@@ -122,6 +124,11 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   input_state_init();
+
+  if (!telemetry_transport_init(&hcom_uart[COM1]))
+  {
+      Error_Handler();
+  }
 
   if (!transmission_controller_start())
   {
