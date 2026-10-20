@@ -224,7 +224,8 @@ bool app_init(app_t *app)
     app->followed_agent_index = (size_t)-1;
     app->camera_mode_key_was_down = false;
     app_capture_car_states(app);
-    if (!camera_controller_set_follow_mode(
+    if (!camera_demo_init(&app->camera_demo, &app->camera) ||
+        !camera_controller_set_demo_mode(
             &app->camera_controller, &app->camera, true))
     {
         return false;
@@ -277,20 +278,33 @@ bool app_run(
         (input->key_mask & INPUT_KEY_CAMERA_MODE) != 0U;
     if (camera_mode_key_down && !app->camera_mode_key_was_down)
     {
-        const bool enable_follow = !app->camera_controller.follow_mode;
-        if (!camera_controller_set_follow_mode(
-                &app->camera_controller, &app->camera, enable_follow))
+        if (app->camera_controller.follow_mode)
         {
-            return false;
+            if (!camera_demo_init(&app->camera_demo, &app->camera) ||
+                !camera_controller_set_demo_mode(
+                    &app->camera_controller, &app->camera, true))
+            {
+                return false;
+            }
+            app->followed_agent_index = (size_t)-1;
         }
-        if (enable_follow)
+        else if (app->camera_controller.demo_mode)
         {
-            app->followed_agent_index = app_find_first_active_car(app);
-            app_capture_car_states(app);
+            if (!camera_controller_set_demo_mode(
+                    &app->camera_controller, &app->camera, false))
+            {
+                return false;
+            }
         }
         else
         {
-            app->followed_agent_index = (size_t)-1;
+            if (!camera_controller_set_follow_mode(
+                    &app->camera_controller, &app->camera, true))
+            {
+                return false;
+            }
+            app->followed_agent_index = app_find_first_active_car(app);
+            app_capture_car_states(app);
         }
     }
     app->camera_mode_key_was_down = camera_mode_key_down;
@@ -336,7 +350,20 @@ bool app_run(
             APP_RENDER_INTERVAL_SECONDS
         ) * APP_RENDER_INTERVAL_SECONDS;
 
-    if (!app_update_follow_camera(app, simulation_dt_seconds)) return false;
+    if (app->camera_controller.demo_mode)
+    {
+        if (!camera_demo_update(
+                &app->camera_demo,
+                &app->camera,
+                simulation_dt_seconds))
+        {
+            return false;
+        }
+    }
+    else if (!app_update_follow_camera(app, simulation_dt_seconds))
+    {
+        return false;
+    }
 
     sample.sequence = app->telemetry_next_sequence++;
     if (!app_render_and_flush(app, &sample))

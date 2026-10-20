@@ -22,6 +22,7 @@ typedef struct
     float mouse_sensitivity_rad_per_count;
 
     bool follow_mode;
+    bool demo_mode;
     bool follow_camera_initialized;
     bool initialized;
 
@@ -52,8 +53,14 @@ bool camera_controller_update(
     const input_snapshot_t *input,
     float dt_seconds);
 
-/* Switch between the existing free-fly controls and vehicle follow mode. */
+/* Enable or disable vehicle-follow mode. */
 bool camera_controller_set_follow_mode(
+    camera_controller_t *controller,
+    camera3d_t *camera,
+    bool enabled);
+
+/* Switch between the camera path and manually controlled free-fly mode. */
+bool camera_controller_set_demo_mode(
     camera_controller_t *controller,
     camera3d_t *camera,
     bool enabled);

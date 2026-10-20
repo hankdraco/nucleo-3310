@@ -16,7 +16,7 @@
 #define INPUT_KEY_MOVE_UP       UINT32_C(0x00000010)
 #define INPUT_KEY_MOVE_DOWN     UINT32_C(0x00000020)
 
-/* A press-edge cycles between follow and free-fly camera control. */
+/* A press-edge cycles through car-follow, demo, and free-fly camera modes. */
 #define INPUT_KEY_CAMERA_MODE UINT32_C(0x00000040)
 
 /*
