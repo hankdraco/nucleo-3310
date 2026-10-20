@@ -28,8 +28,8 @@ static const camera_demo_keyframe_t camera_demo_path[] =
         .position_control_in = { .x = 0.0f, .y = 4.0f, .z = 165.0f },
         .position_control_out = { .x = 0.0f, .y = 4.0f, .z = 125.0f },
         .look_target = { .x = 0.0f, .y = 3.0f, .z = 115.0f },
-        .look_control_in = { .x = 0.0f, .y = 3.0f, .z = 135.0f },
-        .look_control_out = { .x = 0.0f, .y = 3.0f, .z = 75.0f },
+        .look_control_in = { .x = 50.0f, .y = 3.0f, .z = 135.0f },
+        .look_control_out = { .x = -50.0f, .y = 3.0f, .z = 75.0f },
         .duration_seconds = 14.0f
     },
     {
@@ -37,8 +37,8 @@ static const camera_demo_keyframe_t camera_demo_path[] =
         .position_control_in = { .x = 0.0f, .y = 4.0f, .z = -125.0f },
         .position_control_out = { .x = 0.0f, .y = 4.0f, .z = -165.0f },
         .look_target = { .x = 0.0f, .y = 3.0f, .z = -175.0f },
-        .look_control_in = { .x = 0.0f, .y = 3.0f, .z = -135.0f },
-        .look_control_out = { .x = 0.0f, .y = 3.0f, .z = -215.0f },
+        .look_control_in = { .x = -50.0f, .y = 3.0f, .z = -135.0f },
+        .look_control_out = { .x = 50.0f, .y = 3.0f, .z = -215.0f },
         .duration_seconds = 6.0f
     },
     {
@@ -46,8 +46,8 @@ static const camera_demo_keyframe_t camera_demo_path[] =
         .position_control_in = { .x = -40.0f, .y = 95.0f, .z = -90.0f },
         .position_control_out = { .x = 40.0f, .y = 95.0f, .z = -90.0f },
         .look_target = { .x = 0.0f, .y = 2.0f, .z = 0.0f },
-        .look_control_in = { .x = -40.0f, .y = 4.0f, .z = 0.0f },
-        .look_control_out = { .x = 40.0f, .y = 4.0f, .z = 0.0f },
+        .look_control_in = { .x = 50.0f, .y = 4.0f, .z = 0.0f },
+        .look_control_out = { .x = -50.0f, .y = 4.0f, .z = 0.0f },
         .duration_seconds = 9.0f
     },
     {
@@ -92,7 +92,7 @@ static const camera_demo_keyframe_t camera_demo_path[] =
         .position_control_out = { .x = 0.0f, .y = 50.0f, .z = 150.0f },
         .look_target = { .x = 0.0f, .y = 3.0f, .z = 200.0f },
         .look_control_in = { .x = 0.0f, .y = 3.0f, .z = 240.0f },
-        .look_control_out = { .x = 0.0f, .y = 3.0f, .z = 160.0f },
+        .look_control_out = { .x = 50.0f, .y = 3.0f, .z = 160.0f },
         .duration_seconds = 6.0f
     }
 };
