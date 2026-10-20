@@ -1,4 +1,4 @@
-"""Interactive PC controller for the STM32 3D camera."""
+"""Interactive PC controller for the Nucleo-3310 project."""
 
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ def draw_status(
     screen.fill((22, 26, 34))
 
     lines = [
-        f"STM32 Camera Controller - {PORT} @ {BAUD_RATE}",
+        f"Nucleo-3310 PC Controller - {PORT} @ {BAUD_RATE}",
         "W/S: forward/back | A/D: strafe | SPACE/CTRL: vertical | C: cycle camera mode",
         "Mouse: look | ESC: quit | Switch focus to release mouse",
         (
@@ -104,7 +104,7 @@ def draw_status(
 
 def run_controller(port: serial.Serial) -> None:
     screen = pygame.display.set_mode(WINDOW_SIZE)
-    pygame.display.set_caption("STM32 Camera Controller")
+    pygame.display.set_caption("Nucleo-3310 PC Controller")
 
     font = pygame.font.SysFont("consolas", 16)
     clock = pygame.time.Clock()
