@@ -3,46 +3,37 @@
 
 #include <stdint.h>
 
-/*
+/**
  * Semantic input key mask.
  *
  * These bits describe actions, not physical
  * keyboard scan codes or ASCII characters.
  */
-#define INPUT_KEY_FORWARD       UINT32_C(0x00000001)
-#define INPUT_KEY_BACKWARD      UINT32_C(0x00000002)
-#define INPUT_KEY_STRAFE_LEFT   UINT32_C(0x00000004)
-#define INPUT_KEY_STRAFE_RIGHT  UINT32_C(0x00000008)
-#define INPUT_KEY_MOVE_UP       UINT32_C(0x00000010)
-#define INPUT_KEY_MOVE_DOWN     UINT32_C(0x00000020)
+#define INPUT_KEY_FORWARD       UINT32_C(0x00000001) /**< Move forward. */
+#define INPUT_KEY_BACKWARD      UINT32_C(0x00000002) /**< Move backward. */
+#define INPUT_KEY_STRAFE_LEFT   UINT32_C(0x00000004) /**< Move left without changing heading. */
+#define INPUT_KEY_STRAFE_RIGHT  UINT32_C(0x00000008) /**< Move right without changing heading. */
+#define INPUT_KEY_MOVE_UP       UINT32_C(0x00000010) /**< Move vertically upward. */
+#define INPUT_KEY_MOVE_DOWN     UINT32_C(0x00000020) /**< Move vertically downward. */
 
-/* A press-edge cycles through car-follow, demo, and free-fly camera modes. */
+/** Press edge cycles through car-follow, demo and free-fly camera modes. */
 #define INPUT_KEY_CAMERA_MODE UINT32_C(0x00000040)
 
-/*
- * Dane z jednej poprawnej ramki protokołu.
- *
- * mouse_dx / mouse_dy oznaczają przyrost ruchu
- * myszy od poprzedniej transmisji.
- */
+/** Decoded input from one valid protocol frame; mouse deltas are since the prior frame. */
 typedef struct
 {
-    uint32_t key_mask;
-    int32_t mouse_dx;
-    int32_t mouse_dy;
+    uint32_t key_mask; /**< Semantic key-action bitmask. */
+    int32_t mouse_dx; /**< Horizontal mouse displacement since the previous frame. */
+    int32_t mouse_dy; /**< Vertical mouse displacement since the previous frame. */
 
 } input_frame_t;
 
-/*
- * Snapshot wejścia pobierany przez główną pętlę.
- *
- * Przyrosty myszy mogą być sumą wielu ramek.
- */
+/** Input state consumed by the main loop; mouse deltas may aggregate multiple frames. */
 typedef struct
 {
-    uint32_t key_mask;
-    int32_t mouse_dx;
-    int32_t mouse_dy;
+    uint32_t key_mask; /**< Currently held semantic key actions. */
+    int32_t mouse_dx; /**< Accumulated horizontal displacement since last consume. */
+    int32_t mouse_dy; /**< Accumulated vertical displacement since last consume. */
 
 } input_snapshot_t;
 

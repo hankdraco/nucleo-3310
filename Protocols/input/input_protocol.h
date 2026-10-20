@@ -6,8 +6,9 @@
 
 #include "Protocols/input/input_types.h"
 
-#define INPUT_PROTOCOL_BUFFER_SIZE 32U
+#define INPUT_PROTOCOL_BUFFER_SIZE 32U /**< Maximum bytes retained for one protocol line. */
 
+/** Result of feeding one byte to the streaming parser. */
 typedef enum
 {
     INPUT_PROTOCOL_NO_FRAME = 0,
@@ -16,6 +17,7 @@ typedef enum
 
 } input_protocol_result_t;
 
+/** Parser's current line-collection state. */
 typedef enum
 {
     INPUT_PROTOCOL_WAITING = 0,
@@ -24,36 +26,27 @@ typedef enum
 
 } input_protocol_state_t;
 
-/*
- * Stan parsera. Jedna instancja parsera obsługuje
- * jeden strumień bajtów.
- *
- * Struktura jest publiczna, aby można było
- * zaalokować ją statycznie, bez malloc().
- */
+/** State for parsing one byte stream; public for static allocation without malloc. */
 typedef struct
 {
-    uint8_t buffer[INPUT_PROTOCOL_BUFFER_SIZE];
-    size_t length;
-    input_protocol_state_t state;
+    uint8_t buffer[INPUT_PROTOCOL_BUFFER_SIZE]; /**< Current line bytes. */
+    size_t length; /**< Number of bytes currently stored. */
+    input_protocol_state_t state; /**< Waiting, collecting, or discarding an oversized line. */
 
 } input_protocol_t;
 
+/** Reset a parser to the initial waiting state.
+ * @param parser Parser instance to initialize.
+ */
 void input_protocol_init(input_protocol_t *parser);
 
-/*
- * Przekazuje parserowi jeden bajt.
- *
- * FRAME_READY:
- *     frame_out zawiera kompletną, poprawną ramkę.
- *
- * FRAME_REJECTED:
- *     Odrzucono kompletną ramkę lub przepełnioną linię.
- *
- * NO_FRAME:
- *     Parser czeka na dalsze bajty.
- *
- * frame_out musi wskazywać prawidłowy obiekt.
+/** Feed one byte into the streaming parser.
+ * On FRAME_READY, frame_out contains a complete decoded frame. On FRAME_REJECTED,
+ * a malformed or oversized line was discarded. NO_FRAME means more bytes are needed.
+ * @param parser Parser instance for this byte stream.
+ * @param byte Next byte received from the stream.
+ * @param frame_out Destination for a decoded frame when one is ready.
+ * @return Parsing result for this byte.
  */
 input_protocol_result_t input_protocol_feed(
     input_protocol_t *parser,

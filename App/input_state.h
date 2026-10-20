@@ -5,33 +5,23 @@
 
 #include "Protocols/input/input_types.h"
 
-#define INPUT_STATE_TIMEOUT_MS 250U
+#define INPUT_STATE_TIMEOUT_MS 250U /**< Time without valid input after which keys are released. */
 
-/*
- * Inicjalizuje stan wejścia.
- *
- * Wywołać przed uruchomieniem odbioru UART.
- */
+/** Initialize shared input state. Call before starting UART reception. */
 void input_state_init(void);
 
-/*
- * Publikuje dane z poprawnej ramki.
- *
- * Funkcję wywołuje TransmissionController
- * w kontekście przerwania UART.
- *
- * received_at_ms - czas odebrania poprawnej ramki.
+/** Publish a decoded frame from the UART receive-interrupt context.
+ * @param frame Decoded input frame to publish.
+ * @param received_at_ms System tick when the valid frame was received.
  */
 void input_state_publish_from_isr(
     const input_frame_t *frame,
     uint32_t received_at_ms);
 
-/*
- * Pobiera aktualny stan wejścia.
- *
- * Wywoływać z głównej pętli aplikacji.
- * Funkcja sprawdza timeout, kopiuje stan
- * i konsumuje oczekujące przyrosty myszy.
+/** Read the current input snapshot from the main loop.
+ * Applies the input timeout and consumes accumulated mouse deltas.
+ * @param now_ms Current system tick.
+ * @param snapshot Destination for the resulting input state.
  */
 void input_state_consume(
     uint32_t now_ms,

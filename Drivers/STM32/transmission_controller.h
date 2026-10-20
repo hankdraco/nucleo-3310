@@ -3,15 +3,14 @@
 
 #include <stdbool.h>
 
-/*
- * Rozpoczyna odbiór danych z LPUART1.
- * Wywołać po BSP_COM_Init() i input_state_init().
+/** Start receiving input frames from LPUART1.
+ * Call after BSP_COM_Init() and input_state_init().
+ * @return true if UART receive was started; false if startup failed.
  */
 bool transmission_controller_start(void);
 
-/*
- * Informuje, czy wystąpił błąd uniemożliwiający
- * kontynuowanie odbioru.
+/** Check whether reception has entered a nonrecoverable fault state.
+ * @return true if the controller can no longer continue receiving.
  */
 bool transmission_controller_has_fault(void);
 

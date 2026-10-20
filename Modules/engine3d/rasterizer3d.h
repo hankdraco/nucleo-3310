@@ -7,13 +7,14 @@
 #include "Modules/engine3d/geometry3d.h"
 #include "Modules/engine3d/projection.h"
 
-/*
- * Rasterize one triangle in camera-space coordinates.
- *
- * The triangle is clipped against the near plane, projected onto
- * the display, and used to update the depth buffer.
- *
- * Does not modify the display framebuffer.
+/** Rasterize one camera-space triangle into the depth buffer.
+ * Clips against the near plane and does not modify the framebuffer.
+ * @param depth_buffer Depth target to update.
+ * @param projection Perspective projection parameters.
+ * @param a First camera-space vertex.
+ * @param b Second camera-space vertex.
+ * @param c Third camera-space vertex.
+ * @return true on success; false for invalid arguments or geometry.
  */
 bool rasterizer3d_rasterize_triangle(
     depth_buffer_t *depth_buffer,
