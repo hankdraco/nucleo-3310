@@ -1,4 +1,4 @@
-#include "../Core/Inc/pcd8544.h"
+#include "Drivers/PCD8544/pcd8544.h"
 #include "test_common.h"
 #include "test_fake_transport.h"
 

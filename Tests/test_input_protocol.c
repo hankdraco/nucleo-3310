@@ -1,4 +1,4 @@
-#include "input_protocol.h"
+#include "Protocols/input/input_protocol.h"
 
 #include <stdbool.h>
 #include <stdint.h>

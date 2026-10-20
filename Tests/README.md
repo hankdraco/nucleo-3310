@@ -83,27 +83,27 @@ The runner stops at the first failing test suite. Individual tests return `bool`
 ```text
 Tests/test_runner.c
   ├── test_pcd8544.c
-  │     └── Core/Src/pcd8544.c
+  │     └── Drivers/PCD8544/pcd8544.c
   │           └── fake transport
   ├── test_display.c
-  │     └── Core/Src/display.c
+  │     └── Modules/engine3d/display.c
   │           └── PCD8544 interface / fake transport
   ├── input_protocol_tests.c
-  │     └── Core/Src/input_protocol.c
+  │     └── Protocols/input/input_protocol.c
   ├── input_state_tests.c
-  │     └── Core/Src/input_state.c
+  │     └── App/input_state.c
   ├── camera3d_tests.c
-  │     └── Core/Src/camera3d.c
+  │     └── Modules/engine3d/camera3d.c
   │           └── geometry3d.c / matrix4.c
   ├── camera_controller_tests.c
-  │     └── Core/Src/camera_controller.c
+  │     └── App/camera_controller.c
   │           └── camera3d.c / geometry3d.c / matrix4.c
   ├── test_car_trajectory.c / test_car_modifier.c / test_car_spawn.c / test_car_footprint.c
-  │     └── Core/Src/car_trajectory.c / car_modifier.c
+  │     └── Modules/traffic/car_trajectory.c / car_modifier.c
   ├── test_modifier3d.c
-  │     └── Core/Src/modifier3d.c
+  │     └── Modules/engine3d/modifier3d.c
   └── test_scene3d_agents.c
-        └── Core/Src/scene3d.c / modifier3d.c
+        └── Modules/engine3d/scene3d.c / modifier3d.c
 ```
 
 The exact source list and dependencies are defined by `Tests/CMakeLists.txt`. Shared implementation files should only be added once to the host target.

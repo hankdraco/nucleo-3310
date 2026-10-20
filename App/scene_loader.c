@@ -1,0 +1,630 @@
+#include <stddef.h>
+
+#include "App/scene_loader.h"
+#include "Modules/engine3d/cube_model.h"
+#include "Modules/traffic/car_modifier.h"
+#include "Modules/traffic/car_footprint.h"
+#include "Modules/engine3d/display.h"
+#include "Modules/engine3d/modifier3d.h"
+#include "App/city_models.h"
+
+#define SCENE_LOADER_PI_RAD (3.14159265358979323846f)
+
+#define SCENE_LOADER_CITY_SCALE         (8.0f)
+#define SCENE_LOADER_CITY_HALF_EXTENT 20.0f
+
+#define SCENE_LOADER_BUILDING_COLUMNS 4U
+#define SCENE_LOADER_BUILDING_ROWS    3U
+#define SCENE_LOADER_CITY_QUADRANTS   4U
+
+#define SCENE_LOADER_ATTACHMENT_COUNT   6U
+
+
+static const geometry3d_vector3_t
+    scene_loader_attachment_positions[
+        SCENE_LOADER_ATTACHMENT_COUNT] =
+{
+    /* Child on the +X face. */
+    { .x =  1.15f, .y =  0.0f, .z =  0.0f },
+
+    /* Child on the -X face. */
+    { .x = -1.15f, .y =  0.0f, .z =  0.0f },
+
+    /* Child on the +Y face. */
+    { .x =  0.0f, .y =  1.15f, .z =  0.0f },
+
+    /* Child on the -Y face. */
+    { .x =  0.0f, .y = -1.15f, .z =  0.0f },
+
+    /* Child on the +Z face. */
+    { .x =  0.0f, .y =  0.0f, .z =  1.15f },
+
+    /* Child on the -Z face. */
+    { .x =  0.0f, .y =  0.0f, .z = -1.15f }
+};
+
+static const modifier3d_target_t
+    scene_loader_attachment_rotation_axes[
+        SCENE_LOADER_ATTACHMENT_COUNT] =
+{
+    MODIFIER3D_TARGET_ROTATION_X,
+    MODIFIER3D_TARGET_ROTATION_X,
+    MODIFIER3D_TARGET_ROTATION_Y,
+    MODIFIER3D_TARGET_ROTATION_Y,
+    MODIFIER3D_TARGET_ROTATION_Z,
+    MODIFIER3D_TARGET_ROTATION_Z
+};
+
+static const float
+    scene_loader_attachment_rotation_speeds[
+        SCENE_LOADER_ATTACHMENT_COUNT] =
+{
+     0.60f,
+    -0.45f,
+     0.55f,
+    -0.70f,
+     0.65f,
+    -0.50f
+};
+
+static bool scene_loader_add_rotation_modifiers(
+    geometry3d_instance_t *instance,
+    float speed_x,
+    float speed_y,
+    float speed_z)
+{
+    if (instance == NULL)
+    {
+        return false;
+    }
+
+    const modifier3d_config_t rotation_x =
+    {
+        .target = MODIFIER3D_TARGET_ROTATION_X,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -SCENE_LOADER_PI_RAD,
+        .max_value = SCENE_LOADER_PI_RAD,
+        .speed = speed_x
+    };
+
+    const modifier3d_config_t rotation_y =
+    {
+        .target = MODIFIER3D_TARGET_ROTATION_Y,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -SCENE_LOADER_PI_RAD,
+        .max_value = SCENE_LOADER_PI_RAD,
+        .speed = speed_y
+    };
+
+    const modifier3d_config_t rotation_z =
+    {
+        .target = MODIFIER3D_TARGET_ROTATION_Z,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -SCENE_LOADER_PI_RAD,
+        .max_value = SCENE_LOADER_PI_RAD,
+        .speed = speed_z
+    };
+
+    return modifier3d_add(instance, &rotation_x) &&
+           modifier3d_add(instance, &rotation_y) &&
+           modifier3d_add(instance, &rotation_z);
+}
+
+static bool scene_loader_add_rotation_modifier(
+    geometry3d_instance_t *instance,
+    modifier3d_target_t target,
+    float speed)
+{
+    if (instance == NULL)
+    {
+        return false;
+    }
+
+    const modifier3d_config_t config =
+    {
+        .target = target,
+        .behavior = MODIFIER3D_BEHAVIOR_LINEAR_FORWARD,
+        .min_value = -SCENE_LOADER_PI_RAD,
+        .max_value = SCENE_LOADER_PI_RAD,
+        .speed = speed
+    };
+
+    return modifier3d_add(instance, &config);
+}
+
+static const float city_building_x_positions[
+    SCENE_LOADER_BUILDING_COLUMNS] =
+{
+    4.4f, 8.4f, 12.4f, 16.4f
+};
+
+static const float city_building_z_positions[
+    SCENE_LOADER_BUILDING_ROWS] =
+{
+    4.4f, 10.5f, 16.3f
+};
+
+/* Half-widths and half-depths, since cube vertices span [-1, +1]. */
+static const float city_building_half_widths[
+    SCENE_LOADER_BUILDING_COLUMNS] =
+{
+    0.75f, 0.95f, 1.15f, 0.85f
+};
+
+static const float city_building_half_depths[
+    SCENE_LOADER_BUILDING_ROWS] =
+{
+    0.80f, 1.00f, 0.75f
+};
+
+/*
+ * Each value is a building's half-height.
+ * Quadrants:
+ *   0: +X, +Z
+ *   1: -X, +Z
+ *   2: +X, -Z
+ *   3: -X, -Z
+ *
+ * Entries are row-major: row * 4 + column.
+ */
+static const float city_building_half_heights[4][12] =
+{
+    {
+        0.85f, 1.40f, 0.95f, 2.20f,
+        1.25f, 1.80f, 1.40f, 2.60f,
+        2.20f, 0.80f, 1.65f, 2.40f
+    },
+    {
+        1.70f, 0.80f, 2.30f, 1.20f,
+        2.60f, 1.10f, 1.40f, 1.90f,
+        1.00f, 2.40f, 0.75f, 2.20f
+    },
+    {
+        1.00f, 2.10f, 1.40f, 2.60f,
+        0.80f, 2.50f, 1.10f, 1.70f,
+        1.90f, 1.20f, 2.90f, 0.90f
+    },
+    {
+        2.50f, 1.00f, 1.70f, 1.30f,
+        1.50f, 2.90f, 0.90f, 2.10f,
+        1.20f, 1.80f, 2.40f, 0.80f
+    }
+};
+
+static bool scene_loader_add_city_buildings(
+    scene3d_t *scene,
+    geometry3d_vector3_t *highest_roof_position)
+{
+    if (scene == NULL || highest_roof_position == NULL)
+    {
+        return false;
+    }
+
+    float highest_half_height = 0.0f;
+
+    for (size_t quadrant = 0U;
+         quadrant < SCENE_LOADER_CITY_QUADRANTS;
+         ++quadrant)
+    {
+        const float sign_x =
+            ((quadrant & 1U) != 0U) ? -1.0f : 1.0f;
+
+        const float sign_z =
+            ((quadrant & 2U) != 0U) ? -1.0f : 1.0f;
+
+        for (size_t row = 0U;
+             row < SCENE_LOADER_BUILDING_ROWS;
+             ++row)
+        {
+            for (size_t column = 0U;
+                 column < SCENE_LOADER_BUILDING_COLUMNS;
+                 ++column)
+            {
+                /*
+                 * Leave two central positions in the middle row
+                 * empty in every quadrant, creating wider open areas.
+                 */
+                if (row == 1U &&
+                    (column == 1U || column == 2U))
+                {
+                    continue;
+                }
+
+                const size_t height_index =
+                    row * SCENE_LOADER_BUILDING_COLUMNS + column;
+
+                const float half_height =
+                    city_building_half_heights[quadrant][height_index];
+
+                if (half_height >= highest_half_height)
+                {
+                    highest_half_height = half_height;
+                    highest_roof_position->x = sign_x *
+                        city_building_x_positions[column] *
+                        SCENE_LOADER_CITY_SCALE;
+                    highest_roof_position->y = 2.0f * half_height *
+                        SCENE_LOADER_CITY_SCALE;
+                    highest_roof_position->z = sign_z *
+                        city_building_z_positions[row] *
+                        SCENE_LOADER_CITY_SCALE;
+                }
+
+                const geometry3d_instance_t building =
+                {
+                    .model = &geometry3d_cube_model,
+                    .transform =
+                    {
+                        .position =
+                        {
+                            .x = sign_x *
+                                city_building_x_positions[column] *
+                                SCENE_LOADER_CITY_SCALE,
+
+                            .y = half_height *
+                                SCENE_LOADER_CITY_SCALE,
+
+                            .z = sign_z *
+                                city_building_z_positions[row] *
+                                SCENE_LOADER_CITY_SCALE
+                        },
+
+                        .rotation_rad =
+                        {
+                            .x = 0.0f,
+                            .y = 0.0f,
+                            .z = 0.0f
+                        },
+
+                        .scale =
+                        {
+                            .x = city_building_half_widths[column] *
+                                SCENE_LOADER_CITY_SCALE,
+
+                            .y = half_height *
+                                SCENE_LOADER_CITY_SCALE,
+
+                            .z = city_building_half_depths[row] *
+                                SCENE_LOADER_CITY_SCALE
+                        }
+                    }
+                };
+
+                if (!scene3d_add_instance(scene, &building))
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+
+/*
+ * Add one car instance to the central north-south street.
+ *
+ * The behavior context belongs to the caller (app_t), not this function's
+ * stack. scene3d_add_agent_instance() copies the instance and its context pointer,
+ * so the caller-owned context must remain alive while the scene is updated.
+ */
+static bool scene_loader_add_car(
+    scene3d_t *scene,
+    car_modifier_context_t *car_context,
+    car_modifier_environment_t *car_environment)
+{
+    if (scene == NULL || car_context == NULL)
+    {
+        return false;
+    }
+
+    if (!car_modifier_context_init_spawn(car_context, car_environment)) return false;
+    /*
+     * A small cube is a temporary visual proxy for the car. Keep it hidden
+     * below the city until SPAWN finds a clear location and sets its transform.
+     * The trajectory and custom modifier do not depend on this model.
+     */
+    geometry3d_instance_t car =
+    {
+        .model = &geometry3d_cube_model,
+        .transform =
+        {
+            .position = { .x = 0.0f, .y = -1000.0f, .z = 0.0f },
+            .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
+            .scale =
+            {
+                .x = CAR_FOOTPRINT_HALF_WIDTH_UNITS,
+                .y = 1.00f,
+                .z = CAR_FOOTPRINT_HALF_LENGTH_UNITS
+            }
+        }
+    };
+
+    if (!car_modifier_update(&car, 0.0f, car_context)) return false;
+
+    const modifier3d_config_t car_behavior =
+    {
+        .target = MODIFIER3D_TARGET_ALL,
+        .behavior = MODIFIER3D_BEHAVIOR_CUSTOM,
+        .custom_fn = car_modifier_update,
+        .custom_pre_update_fn = car_modifier_safety_update,
+        .context = car_context
+    };
+
+    if (!modifier3d_add(&car, &car_behavior))
+    {
+        return false;
+    }
+
+    return scene3d_add_agent_instance(scene, &car);
+}
+
+bool scene_loader_load(
+    scene3d_t *scene,
+    camera3d_t *camera,
+    projection_perspective_t *projection,
+    car_modifier_context_t *car_contexts,
+    size_t car_count,
+    car_modifier_environment_t *car_environment)
+{
+    if (scene == NULL ||
+        camera == NULL ||
+        projection == NULL ||
+        car_contexts == NULL ||
+        car_count == 0U ||
+        car_count > SCENE3D_MAX_AGENTS ||
+        car_environment == NULL)
+    {
+        return false;
+    }
+
+    scene3d_init(scene);
+
+    car_environment->agent_instances = scene->agent_instances;
+    car_environment->agent_contexts = car_contexts;
+    car_environment->agent_count = &scene->agent_count;
+
+    if (!camera3d_init(camera))
+    {
+        goto fail;
+    }
+
+    /*
+     * 1. Ground: 40 x 40 world units.
+     * Its triangles contribute depth; only its outline is drawn.
+     */
+    const geometry3d_instance_t ground =
+    {
+        .model = &geometry3d_plane_model,
+        .transform =
+        {
+            .position = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
+            .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
+            .scale =
+            {
+                .x = SCENE_LOADER_CITY_HALF_EXTENT *
+                    SCENE_LOADER_CITY_SCALE,
+                .y = 1.0f,
+                .z = SCENE_LOADER_CITY_HALF_EXTENT *
+                    SCENE_LOADER_CITY_SCALE
+            }
+        }
+    };
+
+    /*
+     * 2. One plus-shaped street mesh covering the same XZ footprint as the
+     * former crossing rectangles. Its single surface avoids overlap at the
+     * intersection and sits just above the ground plane.
+     */
+    const geometry3d_instance_t streets =
+    {
+        .model = &geometry3d_plus_road_model,
+        .transform =
+        {
+            .position = { .x = 0.0f, .y = 0.025f, .z = 0.0f },
+            .rotation_rad = { .x = 0.0f, .y = 0.0f, .z = 0.0f },
+            .scale =
+            {
+                .x = SCENE_LOADER_CITY_HALF_EXTENT *
+                    SCENE_LOADER_CITY_SCALE,
+                .y = 1.0f,
+                .z = SCENE_LOADER_CITY_HALF_EXTENT *
+                    SCENE_LOADER_CITY_SCALE
+            }
+        }
+    };
+
+    if (!scene3d_add_instance(scene, &ground) ||
+        !scene3d_add_instance(scene, &streets))
+    {
+        goto fail;
+    }
+
+    /*
+     * 3. Static city buildings.
+     * These instances have no modifiers.
+     */
+    geometry3d_vector3_t highest_roof_position = { 0.0f, 0.0f, 0.0f };
+    if (!scene_loader_add_city_buildings(scene, &highest_roof_position))
+    {
+        goto fail;
+    }
+
+    /*
+     * 4. Animated centerpiece on the tallest building.
+     *
+     * It retains the existing three-axis rotation and all six children.
+     * Keep enough clearance above the roof for the full rotating assembly,
+     * including children carried below the parent in some orientations.
+     */
+    const geometry3d_instance_t centerpiece =
+    {
+        .model = &geometry3d_cube_model,
+        .transform =
+        {
+            .position =
+            {
+                .x = highest_roof_position.x,
+                .y = highest_roof_position.y + 3.5f,
+                .z = highest_roof_position.z
+            },
+            .rotation_rad =
+            {
+                .x = 0.25f,
+                .y = -0.4f,
+                .z = 0.2f
+            },
+            .scale =
+            {
+                .x = 1.4f,
+                .y = 1.4f,
+                .z = 1.4f
+            }
+        }
+    };
+
+    const size_t centerpiece_index = scene->instance_count;
+
+    if (!scene3d_add_instance(scene, &centerpiece))
+    {
+        goto fail;
+    }
+
+    geometry3d_instance_t *centerpiece_instance =
+        scene3d_get_instance(scene, centerpiece_index);
+
+    if (centerpiece_instance == NULL)
+    {
+        goto fail;
+    }
+
+    if (!scene_loader_add_rotation_modifiers(
+            centerpiece_instance,
+            -0.35f,
+            0.55f,
+            0.65f))
+    {
+        goto fail;
+    }
+
+    /*
+     * 5. Six animated children around the centerpiece.
+     */
+    for (size_t i = 0U;
+         i < SCENE_LOADER_ATTACHMENT_COUNT;
+         ++i)
+    {
+        const geometry3d_instance_t child =
+        {
+            .model = &geometry3d_cube_model,
+            .transform =
+            {
+                .position =
+                {
+                    .x = scene_loader_attachment_positions[i].x * 1.7f,
+                    .y = scene_loader_attachment_positions[i].y * 1.7f,
+                    .z = scene_loader_attachment_positions[i].z * 1.7f
+                },
+                .rotation_rad =
+                {
+                    .x = 0.0f,
+                    .y = 0.0f,
+                    .z = 0.0f
+                },
+                .scale =
+                {
+                    .x = 0.12f * 2.5f,
+                    .y = 0.12f * 2.5f,
+                    .z = 0.12f * 2.5f
+                }
+            }
+        };
+
+        const size_t child_index = scene->instance_count;
+
+        if (!scene3d_add_instance(scene, &child))
+        {
+            goto fail;
+        }
+
+        if (!scene3d_set_parent(
+                scene,
+                child_index,
+                centerpiece_index))
+        {
+            goto fail;
+        }
+
+        geometry3d_instance_t *child_instance =
+            scene3d_get_instance(scene, child_index);
+
+        if (child_instance == NULL)
+        {
+            goto fail;
+        }
+
+        if (!scene_loader_add_rotation_modifier(
+                child_instance,
+                scene_loader_attachment_rotation_axes[i],
+                scene_loader_attachment_rotation_speeds[i]))
+        {
+            goto fail;
+        }
+    }
+
+    /*
+     * 6. Moving cars. Each instance owns a distinct, caller-managed
+     * modifier context, while all cars share the same environment and RNG.
+     */
+    for (size_t i = 0U; i < car_count; ++i)
+    {
+        if (!scene_loader_add_car(
+                scene,
+                &car_contexts[i],
+                car_environment))
+        {
+            goto fail;
+        }
+    }
+
+    /*
+     * 7. Elevated oblique view of the city and central intersection.
+     */
+    // camera->position.x = 36.0f;
+    // camera->position.y = 52.0f;
+    // camera->position.z = -54.0f;
+    camera->position.x = 8.0f;
+    camera->position.y = 2.0f;
+    camera->position.z = -6.0f;
+
+    const geometry3d_vector3_t target =
+    {
+        .x = 0.0f,
+        .y = 2.4f,
+        .z = 0.0f
+    };
+
+    if (!camera3d_set_target(camera, &target))
+    {
+        goto fail;
+    }
+
+    const projection_perspective_t loaded_projection =
+    {
+        .focal_length = 48.0f,
+        .near_plane = 0.1f,
+        .center_x = (float)(DISPLAY_WIDTH / 2U),
+        .center_y = (float)(DISPLAY_HEIGHT / 2U)
+    };
+
+    *projection = loaded_projection;
+
+    return true;
+
+fail:
+    scene3d_init(scene);
+    (void)camera3d_init(camera);
+    *projection = (projection_perspective_t){0};
+
+    return false;
+}

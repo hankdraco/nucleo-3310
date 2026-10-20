@@ -356,15 +356,15 @@ Natural next steps include a richer vehicle mesh, sensors and awareness queries,
 
 The principal implementation files are:
 
-- `Core/Inc/geometry3d.h`, `Core/Src/geometry3d.c`
-- `Core/Inc/scene3d.h`, `Core/Src/scene3d.c`
-- `Core/Inc/scene_loader.h`, `Core/Src/scene_loader.c`
-- `Core/Inc/modifier3d_types.h`, `Core/Inc/modifier3d.h`, `Core/Src/modifier3d.c`
-- `Core/Inc/camera3d.h`, `Core/Src/camera3d.c`
-- `Core/Inc/projection.h`, `Core/Src/projection.c`
-- `Core/Inc/renderer3d.h`, `Core/Src/renderer3d.c`
-- `Core/Inc/car_trajectory.h`, `Core/Src/car_trajectory.c`
-- `Core/Inc/car_modifier.h`, `Core/Src/car_modifier.c`
-- `Core/Inc/app.h`, `Core/Src/app.c`
+- `Modules/engine3d/geometry3d.h`, `Modules/engine3d/geometry3d.c`
+- `Modules/engine3d/scene3d.h`, `Modules/engine3d/scene3d.c`
+- `App/scene_loader.h`, `App/scene_loader.c`
+- `Modules/engine3d/modifier3d_types.h`, `Modules/engine3d/modifier3d.h`, `Modules/engine3d/modifier3d.c`
+- `Modules/engine3d/camera3d.h`, `Modules/engine3d/camera3d.c`
+- `Modules/engine3d/projection.h`, `Modules/engine3d/projection.c`
+- `Modules/engine3d/renderer3d.h`, `Modules/engine3d/renderer3d.c`
+- `Modules/traffic/car_trajectory.h`, `Modules/traffic/car_trajectory.c`
+- `Modules/traffic/car_modifier.h`, `Modules/traffic/car_modifier.c`
+- `App/app.h`, `App/app.c`
 
 When implementation details change, this document should be updated alongside the relevant code. It is intended to explain the architecture at the current milestone, not to prescribe behaviour that has not yet been implemented.

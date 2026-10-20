@@ -24,19 +24,19 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "input_state.h"
-#include "transmission_controller.h"
-#include "telemetry_transport.h"
+#include "App/input_state.h"
+#include "Drivers/STM32/transmission_controller.h"
+#include "Drivers/STM32/telemetry_transport.h"
 #include "stm32g4xx_nucleo.h"
-#include "input_state.h"
+#include "App/input_state.h"
 
-#include "pcd8544.h"
-#include "pcd8544_transport.h"
+#include "Drivers/PCD8544/pcd8544.h"
+#include "Drivers/PCD8544/pcd8544_transport.h"
 
-#include "display.h"
-#include "display_pcd8544.h"
+#include "Modules/engine3d/display.h"
+#include "Drivers/PCD8544/display_pcd8544.h"
 
-#include "app.h"
+#include "App/app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

@@ -1,10 +1,10 @@
-#include "scene3d.h"
+#include "Modules/engine3d/scene3d.h"
 
 #include <stddef.h>
 
-#include "cube_model.h"
-#include "modifier3d.h"
-#include "renderer3d.h"
+#include "Modules/engine3d/cube_model.h"
+#include "Modules/engine3d/modifier3d.h"
+#include "Modules/engine3d/renderer3d.h"
 #include "test_common.h"
 
 typedef struct

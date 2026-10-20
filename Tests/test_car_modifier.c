@@ -1,9 +1,9 @@
-#include "car_modifier.h"
+#include "Modules/traffic/car_modifier.h"
 
 #include <math.h>
 #include <stddef.h>
 
-#include "modifier3d.h"
+#include "Modules/engine3d/modifier3d.h"
 #include "test_common.h"
 
 #define TEST_TOLERANCE 0.0001f
