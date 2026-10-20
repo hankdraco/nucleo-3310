@@ -3,6 +3,7 @@
 #include "input_protocol.h"
 #include "input_state.h"
 #include "stm32g4xx_nucleo.h"
+#include "telemetry_transport.h"
 
 #include <stdint.h>
 
@@ -118,6 +119,14 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
         return;
     }
 
+    telemetry_transport_on_error(huart);
+
     input_protocol_init(&parser);
     arm_receive(huart);
+}
+
+/* The transmission controller remains the sole HAL TX callback owner. */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    telemetry_transport_on_tx_complete(huart);
 }

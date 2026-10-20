@@ -8,13 +8,14 @@ import pygame
 import serial
 
 from protocol import build_frame
+from telemetry_protocol import TelemetryDecoder, cycle_delta
 
 
 PORT = "COM7"  # Change to the ST-Link VCP port.
 BAUD_RATE = 115200
 SEND_RATE_HZ = 60
 
-WINDOW_SIZE = (760, 150)
+WINDOW_SIZE = (1080, 180)
 
 MIN_MOUSE_DELTA = -32768
 MAX_MOUSE_DELTA = 32767
@@ -77,6 +78,7 @@ def draw_status(
     key_mask: int,
     pending_dx: int,
     pending_dy: int,
+    telemetry_status: str,
 ) -> None:
     screen.fill((22, 26, 34))
 
@@ -89,6 +91,7 @@ def draw_status(
             f" | Keys: 0x{key_mask:08X}"
             f" | Pending mouse: {pending_dx}, {pending_dy}"
         ),
+        telemetry_status,
     ]
 
     for index, line in enumerate(lines):
@@ -111,6 +114,15 @@ def run_controller(port: serial.Serial) -> None:
 
     pending_dx = 0
     pending_dy = 0
+    telemetry_decoder = TelemetryDecoder()
+    previous_sequence: int | None = None
+    previous_render_cycles: int | None = None
+    telemetry_fps = 0.0
+    telemetry_dropped = 0
+    update_ms = 0.0
+    render_ms = 0.0
+    lcd_ms = 0.0
+    telemetry_status = "Telemetry: waiting for STM32"
 
     set_mouse_capture(focused)
 
@@ -119,6 +131,55 @@ def run_controller(port: serial.Serial) -> None:
 
     try:
         while running:
+            incoming = port.read(port.in_waiting)
+            for batch in telemetry_decoder.feed(incoming):
+                clock_hz = batch.core_clock_hz
+                if clock_hz == 0:
+                    continue
+
+                for sample in batch.samples:
+                    update_cycles = cycle_delta(
+                        sample.update_start_cycles,
+                        sample.update_end_cycles,
+                    )
+                    render_cycles = cycle_delta(
+                        sample.render_start_cycles,
+                        sample.render_end_cycles,
+                    )
+                    lcd_cycles = cycle_delta(
+                        sample.render_end_cycles,
+                        sample.lcd_end_cycles,
+                    )
+                    update_ms = update_cycles * 1000.0 / clock_hz
+                    render_ms = render_cycles * 1000.0 / clock_hz
+                    lcd_ms = lcd_cycles * 1000.0 / clock_hz
+
+                    if previous_sequence is not None:
+                        sequence_delta = (
+                            sample.sequence - previous_sequence
+                        ) & 0xFFFF
+                        elapsed_cycles = cycle_delta(
+                            previous_render_cycles or 0,
+                            sample.render_start_cycles,
+                        )
+                        if sequence_delta > 0 and elapsed_cycles > 0:
+                            telemetry_fps = (
+                                sequence_delta * clock_hz / elapsed_cycles
+                            )
+                            if sequence_delta > 1:
+                                telemetry_dropped += sequence_delta - 1
+
+                    previous_sequence = sample.sequence
+                    previous_render_cycles = sample.render_start_cycles
+
+                telemetry_status = (
+                    f"STM32: {telemetry_fps:5.1f} FPS"
+                    f" | update {update_ms:5.2f} ms"
+                    f" | render {render_ms:5.2f} ms"
+                    f" | LCD {lcd_ms:5.2f} ms"
+                    f" | sequence gaps {telemetry_dropped}"
+                )
+
             # The event queue must be serviced every iteration.
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -183,6 +244,7 @@ def run_controller(port: serial.Serial) -> None:
                 key_mask,
                 pending_dx,
                 pending_dy,
+                telemetry_status,
             )
 
             # Nominally limit the input/transmission loop to 60 Hz.

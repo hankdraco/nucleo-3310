@@ -10,8 +10,12 @@
 #include "pcd8544_transport.h"
 #include "scene3d.h"
 #include "scene_loader.h"
+#include "stm32g4xx_hal.h"
+#include "telemetry_protocol.h"
+#include "telemetry_transport.h"
 
 #define APP_RENDER_INTERVAL_SECONDS (1.0f / 30.0f)
+#define APP_TELEMETRY_INTERVAL_MS 1000U
 
 static pcd8544_transport_t lcd_transport;
 static pcd8544_t lcd;
@@ -95,8 +99,16 @@ static bool app_update_follow_camera(app_t *app, float dt_seconds)
     return true;
 }
 
-static bool app_render_and_flush(const app_t *app)
+static uint32_t app_read_cycle_counter(void)
 {
+    return DWT->CYCCNT;
+}
+
+static bool app_render_and_flush(
+    const app_t *app,
+    telemetry_sample_t *sample)
+{
+    sample->render_start_cycles = app_read_cycle_counter();
     display_clear(&display);
 
     matrix4_t view_matrix;
@@ -118,7 +130,47 @@ static bool app_render_and_flush(const app_t *app)
         return false;
     }
 
-    return display_pcd8544_flush(&display, &lcd);
+    sample->render_end_cycles = app_read_cycle_counter();
+
+    if (!display_pcd8544_flush(&display, &lcd))
+    {
+        return false;
+    }
+
+    sample->lcd_end_cycles = app_read_cycle_counter();
+    return true;
+}
+
+static bool app_send_telemetry_batch(app_t *app, uint32_t now_ms)
+{
+    if (app->telemetry_sample_count == 0U ||
+        (uint32_t)(now_ms - app->telemetry_batch_start_ms) <
+            APP_TELEMETRY_INTERVAL_MS ||
+        telemetry_transport_is_busy())
+    {
+        return true;
+    }
+
+    size_t frame_size = 0U;
+    if (!telemetry_protocol_encode(
+            SystemCoreClock,
+            app->telemetry_samples,
+            app->telemetry_sample_count,
+            app->telemetry_frame,
+            sizeof(app->telemetry_frame),
+            &frame_size))
+    {
+        return false;
+    }
+
+    if (!telemetry_transport_send(app->telemetry_frame, frame_size))
+    {
+        return true;
+    }
+
+    app->telemetry_sample_count = 0U;
+    app->telemetry_batch_start_ms = now_ms;
+    return true;
 }
 
 bool app_init(app_t *app)
@@ -129,6 +181,13 @@ bool app_init(app_t *app)
     }
 
     app->render_accumulator_seconds = 0.0f;
+    app->telemetry_batch_start_ms = HAL_GetTick();
+    app->telemetry_next_sequence = 0U;
+    app->telemetry_sample_count = 0U;
+
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0U;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
     app->car_environment = (car_modifier_environment_t){
         .city_half_extent_x=160.0f,.city_half_extent_z=160.0f,
         .street_half_width=12.8f,.lane_edge_offset=7.0f,
@@ -249,22 +308,11 @@ bool app_run(
         return false;
     }
 
-    if (dt_seconds > 0.0f)
+    app->render_accumulator_seconds += dt_seconds;
+    if (!isfinite(app->render_accumulator_seconds))
     {
-        if (!scene3d_update(&app->scene, dt_seconds))
-        {
-            return false;
-        }
-
-        app->render_accumulator_seconds += dt_seconds;
-
-        if (!isfinite(app->render_accumulator_seconds))
-        {
-            return false;
-        }
+        return false;
     }
-
-    if (!app_update_follow_camera(app, dt_seconds)) return false;
 
     if (app->render_accumulator_seconds <
         APP_RENDER_INTERVAL_SECONDS)
@@ -272,11 +320,34 @@ bool app_run(
         return true;
     }
 
+    /* Advance the scene only for a frame that will be rendered. */
+    const float simulation_dt_seconds = app->render_accumulator_seconds;
+    telemetry_sample_t sample = {0};
+    sample.update_start_cycles = app_read_cycle_counter();
+    if (!scene3d_update(&app->scene, simulation_dt_seconds))
+    {
+        return false;
+    }
+    sample.update_end_cycles = app_read_cycle_counter();
+
     app->render_accumulator_seconds -=
         floorf(
             app->render_accumulator_seconds /
             APP_RENDER_INTERVAL_SECONDS
         ) * APP_RENDER_INTERVAL_SECONDS;
 
-    return app_render_and_flush(app);
+    if (!app_update_follow_camera(app, simulation_dt_seconds)) return false;
+
+    sample.sequence = app->telemetry_next_sequence++;
+    if (!app_render_and_flush(app, &sample))
+    {
+        return false;
+    }
+
+    if (app->telemetry_sample_count < TELEMETRY_PROTOCOL_MAX_SAMPLES)
+    {
+        app->telemetry_samples[app->telemetry_sample_count++] = sample;
+    }
+
+    return app_send_telemetry_batch(app, HAL_GetTick());
 }

@@ -65,6 +65,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/input_state.c
     Core/Src/input_protocol.c
     Core/Src/transmission_controller.c
+    Core/Src/telemetry_protocol.c
+    Core/Src/telemetry_transport.c
     Core/Src/camera_controller.c
     Core/Src/car_trajectory.c
     Core/Src/car_footprint.c

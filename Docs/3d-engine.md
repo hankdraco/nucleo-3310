@@ -272,7 +272,7 @@ The application separates simulation updates from the slower display refresh.
 
 ### 8.1 Application update
 
-`app_run()` validates its arguments, handles camera-mode input, updates the camera controller, and advances the scene when `dt_seconds > 0`. In vehicle-follow mode, it then updates the camera from the followed agent's latest transform. The application accumulates elapsed time for rendering and schedules a render when the accumulator reaches the configured interval, currently `1 / 30` second.
+`app_run()` validates its arguments, handles camera-mode input, and updates the camera controller on every main-loop iteration. It accumulates elapsed time until the render interval is reached, currently `1 / 30` second. On a render iteration, it passes the entire accumulated delta to `scene3d_update()`, updates the vehicle-follow camera from the new transforms, and then renders the scene. The simulation therefore advances at render cadence rather than on every main-loop iteration; if rendering takes longer than the configured interval, the larger elapsed delta is applied in one update.
 
 Thus, simulation and input handling are not tied to every LCD refresh. The display is small and comparatively slow, while the scene's state can continue to advance between rendered frames.
 
