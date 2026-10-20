@@ -1,7 +1,7 @@
-#include "../Core/Inc/display.h"
+#include "Modules/engine3d/display.h"
 #include "test_common.h"
 #include "test_fake_transport.h"
-#include "../Core/Inc/display_pcd8544.h"
+#include "Drivers/PCD8544/display_pcd8544.h"
 
 static bool test_display_clear(void)
 {

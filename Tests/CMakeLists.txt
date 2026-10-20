@@ -21,24 +21,24 @@ add_executable(nucleo_3310_tests
     test_modifier3d.c
     test_scene3d_agents.c
     test_city_models.c
-    ../Core/Src/scene3d.c
-    ../Core/Src/cube_model.c
-    ../Core/Src/modifier3d.c
-    ../Core/Src/pcd8544.c
-    ../Core/Src/display.c
-    ../Core/Src/display_pcd8544.c
-    ../Core/Src/input_protocol.c
-    ../Core/Src/input_state.c
-    ../Core/Src/camera3d.c
-    ../Core/Src/camera_controller.c
-    ../Core/Src/geometry3d.c
-    ../Core/Src/city_models.c
-    ../Core/Src/matrix4.c
-    ../Core/Src/car_trajectory.c
-    ../Core/Src/car_modifier.c
-    ../Core/Src/car_footprint.c
+    ../Modules/engine3d/scene3d.c
+    ../Modules/engine3d/cube_model.c
+    ../Modules/engine3d/modifier3d.c
+    ../Drivers/PCD8544/pcd8544.c
+    ../Modules/engine3d/display.c
+    ../Drivers/PCD8544/display_pcd8544.c
+    ../Protocols/input/input_protocol.c
+    ../App/input_state.c
+    ../Modules/engine3d/camera3d.c
+    ../App/camera_controller.c
+    ../Modules/engine3d/geometry3d.c
+    ../App/city_models.c
+    ../Modules/engine3d/matrix4.c
+    ../Modules/traffic/car_trajectory.c
+    ../Modules/traffic/car_modifier.c
+    ../Modules/traffic/car_footprint.c
 )
 
 target_include_directories(nucleo_3310_tests PRIVATE
-    ../Core/Inc
+    ..
 )

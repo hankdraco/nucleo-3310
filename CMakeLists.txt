@@ -45,38 +45,39 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    Core/Src/pcd8544.c
-    Core/Src/pcd8544_transport_stm32.c
-    Core/Src/display.c
-    Core/Src/display_pcd8544.c
-    Core/Src/app.c
-    Core/Src/projection.c
-    Core/Src/geometry3d.c
-    Core/Src/matrix4.c
-    Core/Src/cube_model.c
-    Core/Src/renderer3d.c
-    Core/Src/scene3d.c
-    Core/Src/camera3d.c
-    Core/Src/depth_buffer.c
-    Core/Src/rasterizer3d.c
-    Core/Src/modifier3d.c
-    Core/Src/scene_loader.c
-    Core/Src/city_models.c
-    Core/Src/input_state.c
-    Core/Src/input_protocol.c
-    Core/Src/transmission_controller.c
-    Core/Src/telemetry_protocol.c
-    Core/Src/telemetry_transport.c
-    Core/Src/camera_controller.c
-    Core/Src/camera_demo.c
-    Core/Src/car_trajectory.c
-    Core/Src/car_footprint.c
-    Core/Src/car_modifier.c
+    Drivers/PCD8544/pcd8544.c
+    Drivers/PCD8544/pcd8544_transport_stm32.c
+    Modules/engine3d/display.c
+    Drivers/PCD8544/display_pcd8544.c
+    App/app.c
+    Modules/engine3d/projection.c
+    Modules/engine3d/geometry3d.c
+    Modules/engine3d/matrix4.c
+    Modules/engine3d/cube_model.c
+    Modules/engine3d/renderer3d.c
+    Modules/engine3d/scene3d.c
+    Modules/engine3d/camera3d.c
+    Modules/engine3d/depth_buffer.c
+    Modules/engine3d/rasterizer3d.c
+    Modules/engine3d/modifier3d.c
+    App/scene_loader.c
+    App/city_models.c
+    App/input_state.c
+    Protocols/input/input_protocol.c
+    Drivers/STM32/transmission_controller.c
+    Protocols/telemetry/telemetry_protocol.c
+    Drivers/STM32/telemetry_transport.c
+    App/camera_controller.c
+    App/camera_demo.c
+    Modules/traffic/car_trajectory.c
+    Modules/traffic/car_footprint.c
+    Modules/traffic/car_modifier.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined include paths
+    # Project headers are included with their directory prefix.
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # Add project symbols (macros)

@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "../Core/Inc/pcd8544_transport.h"
+#include "Drivers/PCD8544/pcd8544_transport.h"
 
 #define FAKE_MAX_WRITE_CALLS   32U
 #define FAKE_MAX_WRITE_SIZE    84U
