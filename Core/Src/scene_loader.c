@@ -191,12 +191,16 @@ static const float city_building_half_heights[4][12] =
     }
 };
 
-static bool scene_loader_add_city_buildings(scene3d_t *scene)
+static bool scene_loader_add_city_buildings(
+    scene3d_t *scene,
+    geometry3d_vector3_t *highest_roof_position)
 {
-    if (scene == NULL)
+    if (scene == NULL || highest_roof_position == NULL)
     {
         return false;
     }
+
+    float highest_half_height = 0.0f;
 
     for (size_t quadrant = 0U;
          quadrant < SCENE_LOADER_CITY_QUADRANTS;
@@ -231,6 +235,19 @@ static bool scene_loader_add_city_buildings(scene3d_t *scene)
 
                 const float half_height =
                     city_building_half_heights[quadrant][height_index];
+
+                if (half_height >= highest_half_height)
+                {
+                    highest_half_height = half_height;
+                    highest_roof_position->x = sign_x *
+                        city_building_x_positions[column] *
+                        SCENE_LOADER_CITY_SCALE;
+                    highest_roof_position->y = 2.0f * half_height *
+                        SCENE_LOADER_CITY_SCALE;
+                    highest_roof_position->z = sign_z *
+                        city_building_z_positions[row] *
+                        SCENE_LOADER_CITY_SCALE;
+                }
 
                 const geometry3d_instance_t building =
                 {
@@ -427,17 +444,18 @@ bool scene_loader_load(
      * 3. Static city buildings.
      * These instances have no modifiers.
      */
-    if (!scene_loader_add_city_buildings(scene))
+    geometry3d_vector3_t highest_roof_position = { 0.0f, 0.0f, 0.0f };
+    if (!scene_loader_add_city_buildings(scene, &highest_roof_position))
     {
         goto fail;
     }
 
     /*
-     * 4. Central animated centerpiece.
+     * 4. Animated centerpiece on the tallest building.
      *
      * It retains the existing three-axis rotation and all six children.
-     * The elevated origin keeps the rotating assembly above the ground
-     * for every orientation, including children carried underneath it.
+     * Keep enough clearance above the roof for the full rotating assembly,
+     * including children carried below the parent in some orientations.
      */
     const geometry3d_instance_t centerpiece =
     {
@@ -446,9 +464,9 @@ bool scene_loader_load(
         {
             .position =
             {
-                .x = 0.0f,
-                .y = 3.5f,
-                .z = 0.0f
+                .x = highest_roof_position.x,
+                .y = highest_roof_position.y + 3.5f,
+                .z = highest_roof_position.z
             },
             .rotation_rad =
             {

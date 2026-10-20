@@ -68,6 +68,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/telemetry_protocol.c
     Core/Src/telemetry_transport.c
     Core/Src/camera_controller.c
+    Core/Src/camera_demo.c
     Core/Src/car_trajectory.c
     Core/Src/car_footprint.c
     Core/Src/car_modifier.c

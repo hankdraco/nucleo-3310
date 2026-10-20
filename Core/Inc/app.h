@@ -9,6 +9,7 @@
 #include "projection.h"
 #include "scene3d.h"
 #include "camera_controller.h"
+#include "camera_demo.h"
 #include "car_modifier.h"
 #include "input_types.h"
 #include "telemetry_protocol.h"
@@ -28,6 +29,7 @@ typedef struct
     scene3d_t scene;
     camera3d_t camera;
     camera_controller_t camera_controller;
+    camera_demo_t camera_demo;
     size_t followed_agent_index;
     bool camera_mode_key_was_down;
     car_modifier_state_t previous_car_states[APP_CAR_COUNT];

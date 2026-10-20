@@ -107,7 +107,7 @@ bool camera_controller_update(
         return false;
     }
 
-    if (controller->follow_mode)
+    if (controller->follow_mode || controller->demo_mode)
     {
         return isfinite(dt_seconds) && dt_seconds >= 0.0f;
     }
@@ -279,6 +279,7 @@ bool camera_controller_set_follow_mode(
         {
             return false;
         }
+        controller->demo_mode = false;
         controller->follow_mode = true;
         controller->follow_camera_initialized = false;
         return true;
@@ -289,7 +290,42 @@ bool camera_controller_set_follow_mode(
         return false;
     }
     controller->follow_mode = false;
+    controller->demo_mode = false;
     controller->follow_camera_initialized = false;
+    controller->yaw_rad = wrap_yaw(camera->rotation_rad.y);
+    controller->pitch_rad = clamp_pitch(camera->rotation_rad.x);
+    return true;
+}
+
+bool camera_controller_set_demo_mode(
+    camera_controller_t *controller,
+    camera3d_t *camera,
+    bool enabled)
+{
+    if (controller == NULL || camera == NULL || !controller->initialized)
+    {
+        return false;
+    }
+
+    if (enabled == controller->demo_mode)
+    {
+        return true;
+    }
+
+    if (enabled)
+    {
+        controller->follow_mode = false;
+        controller->demo_mode = true;
+        controller->follow_camera_initialized = false;
+        return true;
+    }
+
+    if (camera->target_enabled && !camera3d_clear_target(camera))
+    {
+        return false;
+    }
+
+    controller->demo_mode = false;
     controller->yaw_rad = wrap_yaw(camera->rotation_rad.y);
     controller->pitch_rad = clamp_pitch(camera->rotation_rad.x);
     return true;

@@ -84,7 +84,7 @@ def draw_status(
 
     lines = [
         f"STM32 Camera Controller - {PORT} @ {BAUD_RATE}",
-        "W/S: forward/back | A/D: strafe | SPACE/CTRL: vertical | C: camera mode",
+        "W/S: forward/back | A/D: strafe | SPACE/CTRL: vertical | C: cycle camera mode",
         "Mouse: look | ESC: quit | Switch focus to release mouse",
         (
             f"Focus: {'captured' if focused else 'released'}"
