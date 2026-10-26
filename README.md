@@ -76,6 +76,10 @@ FPS varies with the density of objects visible in the camera frame: busier views
 
 The native test executable covers PCD8544 and display logic, input parsing and state, camera control, scene and modifier behavior, city geometry, and vehicle trajectory, spawning, footprints, and safety logic. Configure, build, and run the tests using the instructions in [`Tests/README.md`](Tests/README.md).
 
+## Development workflow
+
+Larger subsystems were developed on feature branches and squash-merged into `master` to keep its history readable. Smaller fixes and tweaks were committed directly to `master` along the way. Feature branches are kept intentionally as a detailed development log.
+
 ## Documentation
 
 - [3D engine architecture](Docs/3d-engine.md)
