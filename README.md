@@ -72,6 +72,30 @@ Measured during several minutes of operation with the demo camera:
 
 FPS varies with the density of objects visible in the camera frame: busier views require more rendering work. Sequence gaps count missing telemetry sample sequence numbers inferred by the PC; zero means no missing samples were detected during this run. See the [telemetry protocol](Docs/telemetry-protocol.md) for details.
 
+### Logic analyzer verification (SPI bus)
+
+Hardware timing and PCD8544 display transfers were verified using a logic analyzer on the SPI bus (`SCK`, `MOSI`, `CS`).
+
+#### Refresh interval and frame timing
+
+![SPI macro view showing frame refresh rate](Docs/spi4.png)
+*Macro view across multiple frame flushes, showing periodic display updates (~122.4 ms frame interval / ~8.16 Hz refresh rate in this scene).*
+
+#### Full screen buffer transfer
+
+![SPI transfer showing 6 graphic banks](Docs/spi1.png)
+*A full 84 × 48 display flush split into 6 horizontal graphic bank writes (addressed `0x40` through `0x45`), with corresponding Chip Select toggles.*
+
+#### Preamble and addressing
+
+![SPI preamble and bank addressing](Docs/spi2.png)
+*Close-up of the transmission header for a single graphic bank, showing X/Y address setup commands (`0x40`, `0x80`) followed by pixel payload data.*
+
+#### Burst pixel data stream
+
+![SPI burst pixel data stream](Docs/spi3.png)
+*High-resolution capture of the raw pixel data payload stream filling the 84-byte column buffer for a display bank.*
+
 ## Host tests
 
 The native test executable covers PCD8544 and display logic, input parsing and state, camera control, scene and modifier behavior, city geometry, and vehicle trajectory, spawning, footprints, and safety logic. Configure, build, and run the tests using the instructions in [`Tests/README.md`](Tests/README.md).
