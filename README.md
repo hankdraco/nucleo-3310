@@ -31,6 +31,21 @@ NUCLEO-3310 is an educational STM32 project that renders and simulates a small 3
 - **Display interface:** SPI
 - **PC interface:** ST-Link Virtual COM Port on LPUART1, 115200 baud, 8N1
 
+### Display wiring
+
+The PCD8544 display is connected to the NUCLEO-G474RE as follows:
+
+| PCD8544 display pin | Nucleo connector pin | STM32 signal / connection |
+| --- | --- | --- |
+| VCC | CN6: 3V3 | 3.3 V supply |
+| GND | CN5: GND | Ground |
+| SCE | CN5: D10 | PB6, chip enable |
+| RST | CN5: D8 | PA9, reset |
+| D/C | CN9: D7 | PA8, data/command select |
+| DN (MOSI) | CN5: D11 | PA7, SPI1 MOSI |
+| SCLK | CN5: D13 | PA5, SPI1 SCK |
+| LED | VCC through a 330 Ω series resistor | Backlight supply |
+
 ## Hardware verification: PCD8544 SPI
 
 Hardware timing and PCD8544 display transfers were verified using a logic analyzer on the SPI bus (`SCK`, `MOSI`, `CS`).
