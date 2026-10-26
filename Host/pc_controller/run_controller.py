@@ -15,7 +15,7 @@ PORT = "COM7"  # Change to the ST-Link VCP port.
 BAUD_RATE = 115200
 SEND_RATE_HZ = 60
 
-WINDOW_SIZE = (1080, 180)
+WINDOW_SIZE = (1080, 212)
 
 MIN_MOUSE_DELTA = -32768
 MAX_MOUSE_DELTA = 32767
@@ -71,6 +71,33 @@ def clamp_mouse_delta(delta: int) -> int:
     return max(MIN_MOUSE_DELTA, min(MAX_MOUSE_DELTA, delta))
 
 
+def update_min_max(
+    minimums: dict[str, float | None],
+    maximums: dict[str, float | None],
+    metric: str,
+    value: float,
+) -> None:
+    """Include one telemetry reading in its since-start range."""
+    current_minimum = minimums[metric]
+    current_maximum = maximums[metric]
+    minimums[metric] = value if current_minimum is None else min(current_minimum, value)
+    maximums[metric] = value if current_maximum is None else max(current_maximum, value)
+
+
+def format_min_max(
+    minimums: dict[str, float | None],
+    maximums: dict[str, float | None],
+    metric: str,
+    precision: int,
+) -> str:
+    """Format a metric's min-max range, or a placeholder before its first sample."""
+    minimum = minimums[metric]
+    maximum = maximums[metric]
+    if minimum is None or maximum is None:
+        return "n/a"
+    return f"{minimum:.{precision}f}–{maximum:.{precision}f}"
+
+
 def draw_status(
     screen: pygame.Surface,
     font: pygame.font.Font,
@@ -79,6 +106,7 @@ def draw_status(
     pending_dx: int,
     pending_dy: int,
     telemetry_status: str,
+    telemetry_range_status: str,
 ) -> None:
     screen.fill((22, 26, 34))
 
@@ -92,6 +120,7 @@ def draw_status(
             f" | Pending mouse: {pending_dx}, {pending_dy}"
         ),
         telemetry_status,
+        telemetry_range_status,
     ]
 
     for index, line in enumerate(lines):
@@ -123,6 +152,21 @@ def run_controller(port: serial.Serial) -> None:
     render_ms = 0.0
     lcd_ms = 0.0
     telemetry_status = "Telemetry: waiting for STM32"
+    telemetry_range_status = "Since start: waiting for STM32 telemetry"
+    telemetry_minimums: dict[str, float | None] = {
+        "fps": None,
+        "update_ms": None,
+        "render_ms": None,
+        "lcd_ms": None,
+        "sequence_gaps": None,
+    }
+    telemetry_maximums: dict[str, float | None] = {
+        "fps": None,
+        "update_ms": None,
+        "render_ms": None,
+        "lcd_ms": None,
+        "sequence_gaps": None,
+    }
 
     set_mouse_capture(focused)
 
@@ -166,11 +210,42 @@ def run_controller(port: serial.Serial) -> None:
                             telemetry_fps = (
                                 sequence_delta * clock_hz / elapsed_cycles
                             )
+                            update_min_max(
+                                telemetry_minimums,
+                                telemetry_maximums,
+                                "fps",
+                                telemetry_fps,
+                            )
                             if sequence_delta > 1:
                                 telemetry_dropped += sequence_delta - 1
 
                     previous_sequence = sample.sequence
                     previous_render_cycles = sample.render_start_cycles
+
+                    update_min_max(
+                        telemetry_minimums,
+                        telemetry_maximums,
+                        "update_ms",
+                        update_ms,
+                    )
+                    update_min_max(
+                        telemetry_minimums,
+                        telemetry_maximums,
+                        "render_ms",
+                        render_ms,
+                    )
+                    update_min_max(
+                        telemetry_minimums,
+                        telemetry_maximums,
+                        "lcd_ms",
+                        lcd_ms,
+                    )
+                    update_min_max(
+                        telemetry_minimums,
+                        telemetry_maximums,
+                        "sequence_gaps",
+                        float(telemetry_dropped),
+                    )
 
                 telemetry_status = (
                     f"STM32: {telemetry_fps:5.1f} FPS"
@@ -178,6 +253,14 @@ def run_controller(port: serial.Serial) -> None:
                     f" | render {render_ms:5.2f} ms"
                     f" | LCD {lcd_ms:5.2f} ms"
                     f" | sequence gaps {telemetry_dropped}"
+                )
+                telemetry_range_status = (
+                    "Since start: "
+                    f"FPS {format_min_max(telemetry_minimums, telemetry_maximums, 'fps', 1)}"
+                    f" | upd {format_min_max(telemetry_minimums, telemetry_maximums, 'update_ms', 2)} ms"
+                    f" | render {format_min_max(telemetry_minimums, telemetry_maximums, 'render_ms', 2)} ms"
+                    f" | LCD {format_min_max(telemetry_minimums, telemetry_maximums, 'lcd_ms', 2)} ms"
+                    f" | gaps {format_min_max(telemetry_minimums, telemetry_maximums, 'sequence_gaps', 0)}"
                 )
 
             # The event queue must be serviced every iteration.
@@ -245,6 +328,7 @@ def run_controller(port: serial.Serial) -> None:
                 pending_dx,
                 pending_dy,
                 telemetry_status,
+                telemetry_range_status,
             )
 
             # Nominally limit the input/transmission loop to 60 Hz.
@@ -275,7 +359,7 @@ def main() -> int:
             write_timeout=0.2,
         ) as port:
             print(f"Connected to {PORT} at {BAUD_RATE} baud.")
-            print("Focus the controller window to control the camera.")
+            print("Focus the PC Controller window to control the camera.")
             print("Press ESC to exit.")
 
             run_controller(port)
@@ -283,7 +367,7 @@ def main() -> int:
         return 0
 
     except (serial.SerialException, OSError, RuntimeError, ValueError) as exc:
-        print(f"Camera controller failed: {exc}", file=sys.stderr)
+        print(f"PC Controller failed: {exc}", file=sys.stderr)
         return 1
 
     finally:

@@ -33,7 +33,21 @@ python -m pip install -r requirements.txt
 python .\run_controller.py
 ```
 
-Start the firmware before running the controller. Use **W/A/S/D** to move, **Space/Ctrl** to move vertically, and the mouse to look around in free-fly mode. Press **C** to cycle camera modes.
+Start the firmware before running the controller. Use **W/A/S/D** to move, **Space/Ctrl** to move vertically, and the mouse to look around in free-fly mode. Press **C** to cycle camera modes:
+
+![PC controller displaying live STM32 telemetry](Docs/pc_controller.png)
+
+### Observed telemetry
+
+Measured during several minutes of operation with the demo camera:
+
+| Metric | Observed range |
+| --- | ---: |
+| FPS | 6.8–20.5 |
+| Engine update | 0.79–2.67 ms |
+| Rendering | 39.93–138.30 ms |
+| LCD transfer | 7.82–8.04 ms |
+| Sequence gaps | 0 |
 
 ## Host tests
 

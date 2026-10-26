@@ -24,7 +24,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "App/input_state.h"
 #include "Drivers/STM32/transmission_controller.h"
 #include "Drivers/STM32/telemetry_transport.h"
 #include "stm32g4xx_nucleo.h"
