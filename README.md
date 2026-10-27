@@ -2,9 +2,8 @@
 
 NUCLEO-3310 is an educational STM32 project that renders and simulates a small 3D city on an 84 × 48 Nokia 3310/5110-compatible LCD.
 
-[![NUCLEO-3310 demo](https://img.youtube.com/vi/kDkRbGgrd6Y/hqdefault.jpg)](https://youtu.be/kDkRbGgrd6Y)
-
-*Video: hardware setup and camera flythrough through the 3D city.*
+[![NUCLEO-3310 demo](https://img.youtube.com/vi/aNiS0tWfxnY/hqdefault.jpg)](https://youtu.be/aNiS0tWfxnY)  
+*Video: camera flythrough through the 3D city.*
 
 ## Features
 
@@ -52,26 +51,22 @@ Hardware timing and PCD8544 display transfers were verified using a logic analyz
 
 ### Refresh interval and frame timing
 
-[![SPI refresh interval across multiple display updates](Docs/pcd8544_spi_refresh_interval.png)](Docs/pcd8544_spi_refresh_interval.png?raw=1)
-
+[![SPI refresh interval across multiple display updates](Docs/pcd8544_spi_refresh_interval.png)](Docs/pcd8544_spi_refresh_interval.png?raw=1)  
 *Macro view across multiple frame flushes, showing periodic display updates (~122.4 ms frame interval / ~8.16 Hz refresh rate in this scene).*
 
 ### Full screen buffer transfer
 
-[![Full PCD8544 frame transfer split into six graphic banks](Docs/pcd8544_spi_full_frame_transfer.png)](Docs/pcd8544_spi_full_frame_transfer.png?raw=1)
-
+[![Full PCD8544 frame transfer split into six graphic banks](Docs/pcd8544_spi_full_frame_transfer.png)](Docs/pcd8544_spi_full_frame_transfer.png?raw=1)  
 *A full 84 × 48 display flush split into six horizontal graphic bank writes (addressed `0x40` through `0x45`), with corresponding Chip Select toggles.*
 
 ### Preamble and addressing
 
-[![PCD8544 preamble and bank addressing commands](Docs/pcd8544_spi_addressing_commands.png)](Docs/pcd8544_spi_addressing_commands.png?raw=1)
-
+[![PCD8544 preamble and bank addressing commands](Docs/pcd8544_spi_addressing_commands.png)](Docs/pcd8544_spi_addressing_commands.png?raw=1)  
 *Close-up of the transmission header for a single graphic bank, showing X/Y address setup commands (`0x40`, `0x80`) followed by pixel payload data.*
 
 ### Burst pixel data stream
 
-[![PCD8544 pixel data payload burst](Docs/pcd8544_spi_pixel_data_burst.png)](Docs/pcd8544_spi_pixel_data_burst.png?raw=1)
-
+[![PCD8544 pixel data payload burst](Docs/pcd8544_spi_pixel_data_burst.png)](Docs/pcd8544_spi_pixel_data_burst.png?raw=1)  
 *High-resolution capture of the raw pixel data payload stream filling the 84-byte column buffer for a display bank.*
 
 ## Build and flash firmware
