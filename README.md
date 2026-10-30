@@ -2,7 +2,7 @@
 
 NUCLEO-3310 is an educational STM32 project that renders and simulates a small 3D city on an 84 × 48 Nokia 3310/5110-compatible LCD.
 
-[![NUCLEO-3310 demo](https://img.youtube.com/vi/aNiS0tWfxnY/hqdefault.jpg)](https://youtu.be/aNiS0tWfxnY)  
+[![NUCLEO-3310 demo](https://img.youtube.com/vi/zWzJHERSM00/hqdefault.jpg)](https://youtu.be/zWzJHERSM00)  
 *Video: camera flythrough through the 3D city.*
 
 ## Features
